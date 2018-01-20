@@ -1,22 +1,16 @@
 package quic
 
 import (
-	"fmt"
-	"net"
+	"net/url"
 
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
 
 type dialer struct {
-	opt        *options
-	ip         *net.IPAddr
-	port, path string
-	sock       mangos.Socket
-}
-
-func (d dialer) netloc() string {
-	return fmt.Sprintf("%s:%s", d.ip.String(), d.port)
+	opt  *options
+	u    *url.URL
+	sock mangos.Socket
 }
 
 func (d dialer) Dial() (mangos.Pipe, error) {

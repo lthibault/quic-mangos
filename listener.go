@@ -1,23 +1,20 @@
 package quic
 
 import (
-	"fmt"
-	"net"
+	"net/url"
 
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
 
 type listener struct {
-	cq         chan struct{}
-	opt        *options
-	ip         *net.IPAddr
-	port, path string
-	sock       mangos.Socket
+	cq   chan struct{}
+	opt  *options
+	u    *url.URL
+	sock mangos.Socket
 }
 
 func (l *listener) Listen() error {
-
 	return nil
 }
 
@@ -37,6 +34,4 @@ func (l listener) GetOption(name string) (interface{}, error) {
 	return l.opt.get(name)
 }
 
-func (l listener) Address() string {
-	return fmt.Sprintf("quic://%s:%s%s", l.ip, l.port, l.path)
-}
+func (l listener) Address() string { return l.u.String() }

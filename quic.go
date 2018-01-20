@@ -55,33 +55,27 @@ func (t quicTrans) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer
 		return nil, errors.Wrap(err, "url parse")
 	}
 
-	ip, err := resolveURL(u)
-	if err != nil {
-		return nil, errors.Wrap(err, "resolve addr")
-	}
+	u.Path = filepath.Clean(u.Path)
 
 	return &dialer{
-		ip:   ip,
-		port: u.Port(),
-		path: filepath.Clean(u.Path),
+		u:    u,
+		opt:  t.opt,
+		sock: sock,
 	}, nil
 }
 
-func (quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeListener, error) {
+func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeListener, error) {
 	u, err := url.ParseRequestURI(addr)
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
 	}
 
-	ip, err := resolveURL(u)
-	if err != nil {
-		return nil, errors.Wrap(err, "resolve addr")
-	}
+	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
-		ip:   ip,
-		port: u.Port(),
-		path: filepath.Clean(u.Path),
+		u:    u,
+		opt:  t.opt,
+		sock: sock,
 	}, nil
 }
 
