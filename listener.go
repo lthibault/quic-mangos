@@ -1,41 +1,42 @@
 package quic
 
 import (
-	"net/url"
+	"fmt"
+	"net"
 
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
 
 type listener struct {
-	url  *url.URL
-	sock mangos.Socket
+	cq         chan struct{}
+	opt        *options
+	ip         net.IPAddr
+	port, path string
+	sock       mangos.Socket
 }
 
-func (listener) Listen() error {
+func (l *listener) Listen() error {
 
-	// Do we have an open quic session matching the URL?
-	// How do we match a stream to a path?
-
-	return errors.New("LISTEN NOT IMPLEMENTED")
+	return nil
 }
 
-func (listener) Accept() (mangos.Pipe, error) {
-	return nil, errors.New("ACCEPT NOT IMPLEMENTED")
+func (l *listener) Accept() (mangos.Pipe, error) {
+	return nil, errors.New("LISTENER::ACCEPT NOT IMPLEMENTED")
 }
 
-func (listener) Close() error {
-	return errors.New("CLOSE NOT IMPLEMENTED")
+func (l listener) Close() error {
+	return errors.New("LISTENER::CLOSE NOT IMPLEMENTED")
 }
 
-func (listener) SetOption(name string, value interface{}) error {
-	return errors.New("LISTENER::SETOPT NOT IMPLEMENTED")
+func (l listener) SetOption(name string, value interface{}) error {
+	return l.opt.set(name, value)
 }
 
-func (listener) GetOption(name string) (interface{}, error) {
-	return nil, errors.New("LISTENER::GETOPT NOT IMPLEMENTED")
+func (l listener) GetOption(name string) (interface{}, error) {
+	return l.opt.get(name)
 }
 
-func (listener) Address() string {
-	return "ADDRESS NOT IMPLEMENTED"
+func (l listener) Address() string {
+	return fmt.Sprintf("quic://%s:%s%s", l.ip, l.port, l.path)
 }
