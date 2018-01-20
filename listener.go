@@ -11,7 +11,7 @@ import (
 type listener struct {
 	cq         chan struct{}
 	opt        *options
-	ip         net.IPAddr
+	ip         *net.IPAddr
 	port, path string
 	sock       mangos.Socket
 }

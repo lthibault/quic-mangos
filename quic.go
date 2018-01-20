@@ -78,9 +78,11 @@ func (quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeListen
 		return nil, errors.Wrap(err, "resolve addr")
 	}
 
-	// TODO:
-
-	return nil, errors.New("NEWLISTENER NOT IMPLEMENTED")
+	return &listener{
+		ip:   ip,
+		port: u.Port(),
+		path: filepath.Clean(u.Path),
+	}, nil
 }
 
 // NewTransport allocates a new quic:// transport.
