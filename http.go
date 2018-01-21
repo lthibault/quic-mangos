@@ -17,11 +17,54 @@ import (
 	"github.com/pkg/errors"
 )
 
-var transport = &serverPool{svr: make(map[string]*router)}
+var transport transporter = &serverPool{svr: make(map[string]*server)}
+
+type transporter interface {
+	MaybeInit(string, *options) (*router, error)
+}
+
+type server struct {
+	ctx.Doner
+	err error
+	ch  chan error
+	*router
+	h2 *h2quic.Server
+}
+
+func newServer(netloc string, tlsc *tls.Config, qconf *quic.Config) *server {
+	s := new(server)
+	c, cancel := context.WithCancel(context.Background())
+
+	var ctr *refctx.RefCtr
+	s.Doner, ctr = refctx.WithRefCount(c)
+	s.router = newRouter(ctr)
+
+	s.h2 = newH2(netloc, s.router, tlsc, qconf)
+	s.ch = make(chan error, 1)
+
+	go func() {
+		s.ch <- s.h2.ListenAndServe()
+		cancel()
+		close(s.ch)
+	}()
+
+	return s
+}
+
+func (s *server) Err() error {
+	if s.err == nil {
+		select {
+		case s.err = <-s.ch:
+		default:
+		}
+	}
+
+	return s.err
+}
 
 type serverPool struct {
 	sync.RWMutex
-	svr map[string]*router
+	svr map[string]*server
 }
 
 func (p *serverPool) GC(svr *h2quic.Server) func() {
@@ -38,8 +81,7 @@ func (p *serverPool) MaybeInit(netloc string, opt *options) (*router, error) {
 	defer p.Unlock()
 
 	if r, ok := p.svr[netloc]; ok {
-		r.Incr()
-		return r, nil
+		return r.router, nil
 	}
 
 	var tlsc *tls.Config
@@ -54,28 +96,18 @@ func (p *serverPool) MaybeInit(netloc string, opt *options) (*router, error) {
 		qconf = v.(*quic.Config)
 	}
 
-	c, cancel := context.WithCancel(context.Background())
+	svr := newServer(netloc, tlsc, qconf)
+	p.svr[netloc] = svr
+	ctx.Defer(svr, p.GC(svr.h2))
 
-	s := newH2(netloc, tlsc, qconf)
-	go func() {
-		// TODO:  we should return an error if ListenAndServe fails...
-		_ = s.ListenAndServe()
-		cancel()
-	}()
-
-	c, ctr := refctx.WithRefCount(c)
-	r := newRouter(ctr)
-	r.Incr()
-	p.svr[netloc] = r
-	ctx.Defer(c, p.GC(s))
-
-	return r, nil
+	return svr.router, svr.Err()
 }
 
-func newH2(addr string, tlsc *tls.Config, cfg *quic.Config) *h2quic.Server {
+func newH2(addr string, h http.Handler, tlsc *tls.Config, cfg *quic.Config) *h2quic.Server {
 	return &h2quic.Server{
 		Server: &http.Server{
 			Addr:      addr,
+			Handler:   h,
 			TLSConfig: tlsc,
 		},
 		QuicConfig: cfg,

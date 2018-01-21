@@ -1,16 +1,13 @@
 package quic
 
 import (
+	"io"
+
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
 
-type pipe struct {
-}
-
-func (p pipe) Close() error {
-	return errors.New("PIPE::CLOSE NOT IMPLEMENTED")
-}
+type pipe struct{ io.ReadWriteCloser }
 
 func (pipe) Send(*mangos.Message) error {
 	return errors.New("PIPE::SEND NOT IMPLEMENTED")

@@ -15,6 +15,8 @@ const (
 	OptionTLSConfig = "QUIC-TLS-CONFIG"
 	// OptionQUICConfig maps to a *quic.Config value
 	OptionQUICConfig = "QUIC-UDP-CONFIG"
+	// OptionAcceptTimeout specifies a timeout for accepting incoming connections
+	OptionAcceptTimeout = "QUIC-UDP-ACCEPT-TIMEOUT"
 )
 
 type options struct {
@@ -74,7 +76,7 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
-		u:    u,
+		URL:  u,
 		ch:   make(chan io.ReadWriteCloser, 1),
 		opt:  t.opt,
 		sock: sock,
@@ -83,7 +85,5 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 
 // NewTransport allocates a new quic:// transport.
 func NewTransport() mangos.Transport {
-	return &quicTrans{
-		opt: &options{opt: make(map[string]interface{})},
-	}
+	return &quicTrans{opt: &options{opt: make(map[string]interface{})}}
 }
