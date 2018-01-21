@@ -3,7 +3,6 @@ package quic
 import (
 	"io"
 	"net/url"
-	"time"
 
 	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
@@ -20,7 +19,7 @@ type listener struct {
 
 func (l *listener) Listen() (err error) {
 	var r *router
-	if r, err = transport.MaybeInit(l.URL.Host, l.opt); err != nil {
+	if r, err = transport.Bind(l.URL.Host, l.opt); err != nil {
 		err = errors.Wrap(err, "transport")
 	} else if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
 		err = errors.Wrap(err, "register path")
@@ -34,22 +33,12 @@ func (l *listener) Listen() (err error) {
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	var timeout time.Duration
-	if v, err := l.opt.get(OptionAcceptTimeout); err != nil {
-		timeout = time.Duration(time.Second * 30)
-	} else {
-		timeout = v.(time.Duration)
+	rwc, ok := <-l.ch
+	if !ok {
+		return nil, errors.New("transport closed")
 	}
+	return &pipe{ReadWriteCloser: rwc}, nil
 
-	select {
-	case rwc, ok := <-l.ch:
-		if !ok {
-			return nil, errors.New("transport closed")
-		}
-		return &pipe{ReadWriteCloser: rwc}, nil
-	case <-time.After(timeout):
-		return nil, errors.New("timeout")
-	}
 }
 
 func (l listener) Close() (err error) {

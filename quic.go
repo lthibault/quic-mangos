@@ -15,8 +15,6 @@ const (
 	OptionTLSConfig = "QUIC-TLS-CONFIG"
 	// OptionQUICConfig maps to a *quic.Config value
 	OptionQUICConfig = "QUIC-UDP-CONFIG"
-	// OptionAcceptTimeout specifies a timeout for accepting incoming connections
-	OptionAcceptTimeout = "QUIC-UDP-ACCEPT-TIMEOUT"
 )
 
 type options struct {
@@ -61,7 +59,7 @@ func (t quicTrans) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer
 	u.Path = filepath.Clean(u.Path)
 
 	return &dialer{
-		u:    u,
+		URL:  u,
 		opt:  t.opt,
 		sock: sock,
 	}, nil

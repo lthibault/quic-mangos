@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"unsafe"
 
@@ -12,15 +13,61 @@ import (
 	"github.com/SentimensRG/ctx/refctx"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/h2quic"
+	"golang.org/x/sync/errgroup"
 
 	radix "github.com/armon/go-radix"
 	"github.com/pkg/errors"
 )
 
-var transport transporter = &serverPool{svr: make(map[string]*server)}
+var transport transporter = &trans{
+	serverPool: &serverPool{svr: make(map[string]*server)},
+	client:     &client{&http.Client{Transport: &h2quic.RoundTripper{}}},
+}
 
 type transporter interface {
-	MaybeInit(string, *options) (*router, error)
+	Bind(string, *options) (*router, error)
+	Connect(*url.URL) (io.ReadWriteCloser, error)
+}
+
+type trans struct {
+	*serverPool
+	*client
+}
+
+type doer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+type clientConn struct {
+	io.ReadCloser
+	io.WriteCloser
+}
+
+func (c clientConn) Close() error {
+	var g errgroup.Group
+	g.Go(c.ReadCloser.Close)
+	g.Go(c.WriteCloser.Close)
+	return g.Wait()
+}
+
+type client struct{ doer }
+
+func (c *client) Connect(u *url.URL) (io.ReadWriteCloser, error) {
+	pr, pw := io.Pipe()
+	req, err := http.NewRequest(http.MethodConnect, u.String(), pr)
+	if err != nil {
+		return nil, errors.Wrap(err, "new request")
+	}
+
+	res, err := c.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "http connect")
+	}
+
+	return &clientConn{
+		WriteCloser: pw,
+		ReadCloser:  res.Body,
+	}, nil
 }
 
 type server struct {
@@ -76,7 +123,7 @@ func (p *serverPool) GC(svr *h2quic.Server) func() {
 	}
 }
 
-func (p *serverPool) MaybeInit(netloc string, opt *options) (*router, error) {
+func (p *serverPool) Bind(netloc string, opt *options) (*router, error) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -114,7 +161,7 @@ func newH2(addr string, h http.Handler, tlsc *tls.Config, cfg *quic.Config) *h2q
 	}
 }
 
-type fullDuplexConn struct {
+type serverConn struct {
 	io.Writer
 	io.ReadCloser
 }
@@ -181,7 +228,7 @@ func (rtr *router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if c, ok := rtr.path.Get(r.URL.Path); !ok {
 		http.Error(w, "no listener at "+r.URL.Path, http.StatusNotFound)
 	} else {
-		c <- &fullDuplexConn{
+		c <- &serverConn{
 			Writer:     w,
 			ReadCloser: r.Body,
 		}

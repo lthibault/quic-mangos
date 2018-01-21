@@ -8,13 +8,18 @@ import (
 )
 
 type dialer struct {
+	*url.URL
 	opt  *options
-	u    *url.URL
 	sock mangos.Socket
 }
 
 func (d dialer) Dial() (mangos.Pipe, error) {
-	return nil, errors.New("DIALER::DIAL NOT IMPLEMENTED")
+	rwc, err := transport.Connect(d.URL)
+	if err != nil {
+		return nil, errors.Wrap(err, "dial")
+	}
+
+	return &pipe{ReadWriteCloser: rwc}, nil
 }
 
 func (d dialer) SetOption(name string, value interface{}) error {
