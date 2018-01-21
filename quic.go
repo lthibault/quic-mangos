@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"io"
 	"net/url"
 	"path/filepath"
 	"sync"
@@ -74,6 +75,7 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 
 	return &listener{
 		u:    u,
+		ch:   make(chan io.ReadWriteCloser, 1),
 		opt:  t.opt,
 		sock: sock,
 	}, nil
