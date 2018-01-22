@@ -25,7 +25,7 @@ var transport transporter = &trans{
 }
 
 type transporter interface {
-	Bind(string, *options) (*router, error)
+	Bind(*url.URL, chan<- io.ReadWriteCloser, *options) (*router, error)
 	Connect(*url.URL) (io.ReadWriteCloser, error)
 }
 
@@ -75,12 +75,14 @@ type server struct {
 	err error
 	ch  chan error
 	*router
-	h2 *h2quic.Server
+	h2     *h2quic.Server
+	cancel func()
 }
 
 func newServer(netloc string, tlsc *tls.Config, qconf *quic.Config) *server {
 	s := new(server)
-	c, cancel := context.WithCancel(context.Background())
+	var c context.Context
+	c, s.cancel = context.WithCancel(context.Background())
 
 	var ctr *refctx.RefCtr
 	s.Doner, ctr = refctx.WithRefCount(c)
@@ -91,11 +93,16 @@ func newServer(netloc string, tlsc *tls.Config, qconf *quic.Config) *server {
 
 	go func() {
 		s.ch <- s.h2.ListenAndServe()
-		cancel()
-		close(s.ch)
+		_ = s.Close()
 	}()
 
 	return s
+}
+
+func (s server) Close() error {
+	s.cancel()
+	close(s.ch)
+	return s.h2.Close()
 }
 
 func (s *server) Err() error {
@@ -123,11 +130,11 @@ func (p *serverPool) GC(svr *h2quic.Server) func() {
 	}
 }
 
-func (p *serverPool) Bind(netloc string, opt *options) (*router, error) {
+func (p *serverPool) Bind(u *url.URL, ch chan<- io.ReadWriteCloser, opt *options) (*router, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	if r, ok := p.svr[netloc]; ok {
+	if r, ok := p.svr[u.Host]; ok {
 		return r.router, nil
 	}
 
@@ -143,8 +150,13 @@ func (p *serverPool) Bind(netloc string, opt *options) (*router, error) {
 		qconf = v.(*quic.Config)
 	}
 
-	svr := newServer(netloc, tlsc, qconf)
-	p.svr[netloc] = svr
+	svr := newServer(u.Host, tlsc, qconf)
+	if err := svr.RegisterPath(u.Path, ch); err != nil {
+		// TODO:  shut down the server
+		return nil, errors.Wrap(err, "register path")
+	}
+
+	p.svr[u.Host] = svr
 	ctx.Defer(svr, p.GC(svr.h2))
 
 	return svr.router, svr.Err()
@@ -206,7 +218,7 @@ func (rtr *router) RegisterPath(path string, ch chan<- io.ReadWriteCloser) error
 	rtr.Lock()
 	defer rtr.Unlock()
 
-	if !rtr.path.Exist(path) {
+	if rtr.path.Exist(path) {
 		return errors.Errorf("handler exists at %s", path)
 	}
 

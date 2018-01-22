@@ -19,14 +19,17 @@ type listener struct {
 
 func (l *listener) Listen() (err error) {
 	var r *router
-	if r, err = transport.Bind(l.URL.Host, l.opt); err != nil {
+	if r, err = transport.Bind(l.URL, l.ch, l.opt); err != nil {
 		err = errors.Wrap(err, "transport")
-	} else if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
-		err = errors.Wrap(err, "register path")
 	} else {
 		r.Incr()
 		ctx.Defer(ctx.Lift(l.cq), r.Decr)
-		err = r.RegisterPath(l.URL.Path, l.ch)
+
+		if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
+			err = errors.Wrap(err, "register path")
+		} else {
+			ctx.Defer(ctx.Lift(l.cq), r.Cleanup(l.URL.Path))
+		}
 	}
 
 	return
@@ -37,7 +40,10 @@ func (l listener) Accept() (mangos.Pipe, error) {
 	if !ok {
 		return nil, errors.New("transport closed")
 	}
-	return &pipe{ReadWriteCloser: rwc}, nil
+	return &pipe{
+		ReadWriteCloser: rwc,
+		proto:           l.sock.GetProtocol(),
+	}, nil
 
 }
 

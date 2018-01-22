@@ -19,7 +19,10 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "dial")
 	}
 
-	return &pipe{ReadWriteCloser: rwc}, nil
+	return &pipe{
+		ReadWriteCloser: rwc,
+		proto:           d.sock.GetProtocol(),
+	}, nil
 }
 
 func (d dialer) SetOption(name string, value interface{}) error {
