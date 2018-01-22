@@ -1,7 +1,7 @@
 package quic
 
 import (
-	"io"
+	"net"
 	"net/url"
 
 	"github.com/SentimensRG/ctx"
@@ -11,44 +11,37 @@ import (
 
 type listener struct {
 	*url.URL
-	cq   chan struct{}
-	ch   chan io.ReadWriteCloser
+
+	d      ctx.Doner
+	cancel func()
+
+	ch   chan net.Conn
 	opt  *options
 	sock mangos.Socket
 }
 
 func (l *listener) Listen() (err error) {
-	var r *router
+	var r router
 	if r, err = transport.Bind(l.URL, l.ch, l.opt); err != nil {
 		err = errors.Wrap(err, "transport")
-	} else {
-		r.Incr()
-		ctx.Defer(ctx.Lift(l.cq), r.Decr)
-
-		if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
-			err = errors.Wrap(err, "register path")
-		} else {
-			ctx.Defer(ctx.Lift(l.cq), r.Cleanup(l.URL.Path))
-		}
+	} else if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
+		l.cancel()
 	}
 
 	return
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	rwc, ok := <-l.ch
+	conn, ok := <-l.ch
 	if !ok {
 		return nil, errors.New("transport closed")
 	}
-	return &pipe{
-		ReadWriteCloser: rwc,
-		proto:           l.sock.GetProtocol(),
-	}, nil
+	return mangos.NewConnPipe(conn, l.sock)
 
 }
 
 func (l listener) Close() (err error) {
-	close(l.cq)
+	l.cancel()
 	return
 }
 

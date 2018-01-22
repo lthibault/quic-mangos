@@ -1,11 +1,12 @@
 package quic
 
 import (
-	"io"
+	"net"
 	"net/url"
 	"path/filepath"
 	"sync"
 
+	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
@@ -70,14 +71,18 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
 	}
-
 	u.Path = filepath.Clean(u.Path)
 
+	var o sync.Once
+	ch := make(chan struct{})
+
 	return &listener{
-		URL:  u,
-		ch:   make(chan io.ReadWriteCloser, 1),
-		opt:  t.opt,
-		sock: sock,
+		URL:    u,
+		d:      ctx.Lift(ch),
+		cancel: func() { o.Do(func() { close(ch) }) },
+		ch:     make(chan net.Conn),
+		opt:    t.opt,
+		sock:   sock,
 	}, nil
 }
 

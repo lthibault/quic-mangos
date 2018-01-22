@@ -14,15 +14,12 @@ type dialer struct {
 }
 
 func (d dialer) Dial() (mangos.Pipe, error) {
-	rwc, err := transport.Connect(d.URL)
+	conn, err := transport.Connect(d.URL)
 	if err != nil {
 		return nil, errors.Wrap(err, "dial")
 	}
 
-	return &pipe{
-		ReadWriteCloser: rwc,
-		proto:           d.sock.GetProtocol(),
-	}, nil
+	return mangos.NewConnPipe(conn, d.sock)
 }
 
 func (d dialer) SetOption(name string, value interface{}) error {
