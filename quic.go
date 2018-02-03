@@ -43,14 +43,21 @@ func (o *options) set(name string, val interface{}) error {
 	return mangos.ErrBadOption
 }
 
-type quicTrans struct {
+type multiplexer interface {
+	// TODO:  define interface for fetching quic.Listener by netloc
+	// TODO:  define interface for fetching quic.Session by local/remote addr
+	// TODO:  define interface for routing streams by URL path
+	// TODO:  make sure transport satisfies multiplexer
+}
+
+type transport struct {
 	opt    *options
 	listen func() error
 }
 
-func (quicTrans) Scheme() string { return "quic" }
+func (transport) Scheme() string { return "quic" }
 
-func (t quicTrans) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer, error) {
+func (t transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer, error) {
 	u, err := url.ParseRequestURI(addr)
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
@@ -65,7 +72,7 @@ func (t quicTrans) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer
 	}, nil
 }
 
-func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeListener, error) {
+func (t transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeListener, error) {
 	u, err := url.ParseRequestURI(addr)
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
@@ -74,15 +81,16 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
-		URL:  u,
-		opt:  t.opt,
-		sock: sock,
+		URL:         u,
+		opt:         t.opt,
+		sock:        sock,
+		muxListener: newListenMux(t),
 	}, nil
 }
 
 // NewTransport allocates a new quic:// transport.
 func NewTransport() mangos.Transport {
-	return &quicTrans{opt: &options{
+	return &transport{opt: &options{
 		opt: make(map[string]interface{})},
 	}
 }
