@@ -44,7 +44,12 @@ func (o *options) set(name string, val interface{}) error {
 }
 
 type multiplexer interface {
-	// TODO:  define interface for fetching quic.Listener by netloc
+	sync.Locker
+
+	GetListener(netlocator) (*refcntListener, bool)
+	SetListener(netlocator, *refcntListener)
+	DelListener(netlocator) // TODO:  make sure this calls lock/unlock
+
 	// TODO:  define interface for fetching quic.Session by local/remote addr
 	// TODO:  define interface for routing streams by URL path
 	// TODO:  make sure transport satisfies multiplexer

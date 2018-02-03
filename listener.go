@@ -2,8 +2,10 @@ package quic
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/url"
+	"sync/atomic"
 
 	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
@@ -21,22 +23,65 @@ type netlocator interface {
 	Port() string
 }
 
+type refcntListener struct {
+	gc     func()
+	refcnt int32
+	quic.Listener
+}
+
+func (r *refcntListener) Incr() *refcntListener {
+	atomic.AddInt32(&r.refcnt, 1)
+	return r
+}
+
+func (r *refcntListener) DecrAndClose() (err error) {
+	if i := atomic.AddInt32(&r.refcnt, -1); i == 0 {
+		err = r.Close()
+		r.gc()
+	} else if i < 0 {
+		err = errors.New("close called on previously-closed Listener")
+	}
+	return
+}
+
 // listenMux implements muxListener
 type listenMux struct {
-	ql quic.Listener
+	mux multiplexer
+	l   *refcntListener
 }
 
 func newListenMux(m multiplexer) *listenMux {
-	return nil
+	return &listenMux{mux: m}
 }
 
-func (lm listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config) error {
+func listenQUIC(n netlocator, tc *tls.Config, qc *quic.Config) (quic.Listener, error) {
+	netloc := fmt.Sprintf("%s:%s", n.Hostname(), n.Port())
+	return quic.ListenAddr(netloc, tc, qc)
+}
 
-	// TODO:  if we already have a listener on the netloc, load it into the listenmux
-	// TODO:  if we _don't_ have a listener on the netloc, init and load into the listenmux
-	// TODO:  incr the listener
+func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config) error {
+	lm.mux.Lock()
+	defer lm.mux.Unlock()
 
-	return errors.New("LOADLISTENER NOT IMPLEMENTED")
+	var ok bool
+	if lm.l, ok = lm.mux.GetListener(n); !ok {
+
+		// We don't have a listener for this netloc yet, so create it.
+		ql, err := listenQUIC(n, tc, qc)
+		if err != nil {
+			return err
+		}
+
+		// Init refcnt to track the Listener's usage and clean up when we're done
+		lm.l = &refcntListener{
+			Listener: ql,
+			refcnt:   1,
+			gc:       func() { lm.mux.DelListener(n) },
+		}
+		lm.mux.SetListener(n, lm.l)
+	}
+
+	return nil
 }
 
 func (lm listenMux) Accept(path string) (net.Conn, error) {
@@ -62,9 +107,7 @@ func (lm listenMux) Accept(path string) (net.Conn, error) {
 }
 
 func (lm listenMux) Close() error {
-	// TODO:  decrement a counter such that the underlying listener is closed
-	// when it equals 0
-	return errors.New("CLOSE NOT IMPLEMENTED")
+	return lm.l.DecrAndClose()
 }
 
 type listener struct {
