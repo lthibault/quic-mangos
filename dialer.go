@@ -4,6 +4,7 @@ import (
 	"net/url"
 
 	"github.com/go-mangos/mangos"
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
 
@@ -14,12 +15,18 @@ type dialer struct {
 }
 
 func (d dialer) Dial() (mangos.Pipe, error) {
-	conn, err := transport.Connect(d.URL)
+	tc, qc := getQUICCfg(d.opt)
+	sess, err := quic.DialAddr(d.Host, tc, qc)
 	if err != nil {
-		return nil, errors.Wrap(err, "dial")
+		return nil, errors.Wrap(err, "dial quic")
 	}
 
-	return mangos.NewConnPipe(conn, d.sock)
+	stream, err := sess.OpenStreamSync()
+	if err != nil {
+		return nil, errors.Wrap(err, "open stream")
+	}
+
+	return mangos.NewConnPipe(&conn{Stream: stream, Session: sess}, d.sock)
 }
 
 func (d dialer) SetOption(name string, value interface{}) error {

@@ -1,12 +1,10 @@
 package quic
 
 import (
-	"net"
 	"net/url"
 	"path/filepath"
 	"sync"
 
-	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
 	"github.com/pkg/errors"
 )
@@ -46,7 +44,8 @@ func (o *options) set(name string, val interface{}) error {
 }
 
 type quicTrans struct {
-	opt *options
+	opt    *options
+	listen func() error
 }
 
 func (quicTrans) Scheme() string { return "quic" }
@@ -71,22 +70,19 @@ func (t quicTrans) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
 	}
+
 	u.Path = filepath.Clean(u.Path)
 
-	var o sync.Once
-	ch := make(chan struct{})
-
 	return &listener{
-		URL:    u,
-		d:      ctx.Lift(ch),
-		cancel: func() { o.Do(func() { close(ch) }) },
-		ch:     make(chan net.Conn),
-		opt:    t.opt,
-		sock:   sock,
+		URL:  u,
+		opt:  t.opt,
+		sock: sock,
 	}, nil
 }
 
 // NewTransport allocates a new quic:// transport.
 func NewTransport() mangos.Transport {
-	return &quicTrans{opt: &options{opt: make(map[string]interface{})}}
+	return &quicTrans{opt: &options{
+		opt: make(map[string]interface{})},
+	}
 }

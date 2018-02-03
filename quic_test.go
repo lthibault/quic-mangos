@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-mangos/mangos/protocol/pair"
 	"github.com/go-mangos/mangos/protocol/star"
-	"github.com/go-mangos/mangos/transport/inproc"
 )
 
 func TestListen(t *testing.T) {
@@ -45,14 +44,14 @@ func TestIntegration(t *testing.T) {
 		t.Errorf("conn sock create: %s", err)
 	}
 
-	s0.AddTransport(inproc.NewTransport())
-	s1.AddTransport(inproc.NewTransport())
+	s0.AddTransport(NewTransport())
+	s1.AddTransport(NewTransport())
 
-	if err = s0.Listen("inproc:///test"); err != nil {
+	if err = s0.Listen("quic://localhost:9090/"); err != nil {
 		t.Errorf("s0 listen: %s", err)
 	}
 
-	if err = s1.Dial("inproc:///test"); err != nil {
+	if err = s1.Dial("quic://localhost:9090/"); err != nil {
 		t.Errorf("s1 dial: %s", err)
 	}
 

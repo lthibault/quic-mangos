@@ -7,8 +7,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"math/big"
-	"net"
-	"net/url"
+
+	quic "github.com/lucas-clemente/quic-go"
 )
 
 // Setup a bare-bones TLS config for the server
@@ -29,9 +29,27 @@ func generateTLSConfig() *tls.Config {
 	if err != nil {
 		panic(err)
 	}
-	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	return &tls.Config{Certificates: []tls.Certificate{tlsCert}, InsecureSkipVerify: true}
 }
 
-func resolveURL(u *url.URL) (*net.IPAddr, error) {
-	return net.ResolveIPAddr("ip", u.Host)
+func getQUICCfg(opt *options) (tc *tls.Config, qc *quic.Config) {
+	if v, err := opt.get(OptionTLSConfig); err != nil {
+		tc = generateTLSConfig()
+	} else {
+		tc = v.(*tls.Config)
+	}
+
+	// It's acceptable for qc to be nil
+	if v, err := opt.get(OptionQUICConfig); err == nil {
+		qc = v.(*quic.Config)
+	}
+
+	return
 }
+
+type conn struct {
+	quic.Session
+	quic.Stream
+}
+
+func (c conn) Close() error { return c.Stream.Close() }

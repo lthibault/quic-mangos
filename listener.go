@@ -1,48 +1,45 @@
 package quic
 
 import (
-	"net"
 	"net/url"
 
-	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
 
 type listener struct {
 	*url.URL
 
-	d      ctx.Doner
-	cancel func()
+	quic.Listener
 
-	ch   chan net.Conn
 	opt  *options
 	sock mangos.Socket
 }
 
-func (l *listener) Listen() (err error) {
-	var r router
-	if r, err = transport.Bind(l.URL, l.ch, l.opt); err != nil {
-		err = errors.Wrap(err, "transport")
-	} else if err = r.RegisterPath(l.URL.Path, l.ch); err != nil {
-		l.cancel()
+func (l *listener) Listen() error {
+	tc, qc := getQUICCfg(l.opt)
+
+	var err error
+	if l.Listener, err = quic.ListenAddr(l.Host, tc, qc); err != nil {
+		return errors.Wrap(err, "listen quic")
 	}
 
-	return
+	return nil
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	conn, ok := <-l.ch
-	if !ok {
-		return nil, errors.New("transport closed")
+	sess, err := l.Listener.Accept()
+	if err != nil {
+		return nil, errors.Wrap(err, "accept session")
 	}
-	return mangos.NewConnPipe(conn, l.sock)
 
-}
+	stream, err := sess.AcceptStream()
+	if err != nil {
+		return nil, errors.Wrap(err, "accept stream")
+	}
 
-func (l listener) Close() (err error) {
-	l.cancel()
-	return
+	return mangos.NewConnPipe(&conn{Stream: stream, Session: sess}, l.sock)
 }
 
 func (l listener) SetOption(name string, value interface{}) error {
