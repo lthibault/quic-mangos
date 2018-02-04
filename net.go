@@ -23,6 +23,10 @@ type netloc struct{ *url.URL }
 
 func (n netloc) Netloc() string { return n.Host }
 
+type sessionDropper interface {
+	DelSession(net.Addr)
+}
+
 // multiplexer provides an interface to multiplex sockets onto QUIC sessions
 type multiplexer interface {
 	sync.Locker
@@ -32,8 +36,8 @@ type multiplexer interface {
 	DelListener(netlocator)
 
 	GetSession(netlocator) (*refcntSession, bool)
-	AddSession(fmt.Stringer, *refcntSession)
-	DelSession(fmt.Stringer)
+	AddSession(net.Addr, *refcntSession)
+	sessionDropper
 
 	RegisterPath(string, chan<- net.Conn) error
 	UnregisterPath(string)
@@ -45,8 +49,8 @@ type dialMuxer interface {
 	sync.Locker
 
 	GetSession(netlocator) (*refcntSession, bool)
-	AddSession(fmt.Stringer, *refcntSession)
-	DelSession(fmt.Stringer)
+	AddSession(net.Addr, *refcntSession)
+	sessionDropper
 }
 
 type (
@@ -145,10 +149,6 @@ func (r *router) Del(path string) {
 	r.Lock()
 	r.routes.Delete(path)
 	r.Unlock()
-}
-
-type sessionDropper interface {
-	DelSession(fmt.Stringer)
 }
 
 type refcntSession struct {

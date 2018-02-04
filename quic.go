@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -112,13 +111,13 @@ func (t *transport) GetSession(n netlocator) (s *refcntSession, ok bool) {
 	return
 }
 
-func (t *transport) AddSession(s fmt.Stringer, sess *refcntSession) {
-	t.sessions[s.String()] = sess
+func (t *transport) AddSession(a net.Addr, sess *refcntSession) {
+	t.sessions[a.String()] = sess
 }
 
-func (t *transport) DelSession(s fmt.Stringer) {
+func (t *transport) DelSession(a net.Addr) {
 	t.Lock()
-	delete(t.sessions, s.String())
+	delete(t.sessions, a.String())
 	t.Unlock()
 }
 

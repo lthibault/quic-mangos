@@ -1,10 +1,17 @@
 package quic
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/go-mangos/mangos"
 )
+
+type mockAddrNetloc string
+
+func (mockAddrNetloc) Network() string  { return "quic" }
+func (m mockAddrNetloc) String() string { return string(m) }
+func (m mockAddrNetloc) Netloc() string { return m.String() }
 
 func TestNewTransport(t *testing.T) {
 	trans := NewTransport().(*transport)
@@ -90,7 +97,87 @@ func TestNewListener(t *testing.T) {
 }
 
 func TestMultiplexer(t *testing.T) {
+	trans := NewTransport().(*transport)
+	u, _ := url.ParseRequestURI("quic://127.0.0.1:9001/hello")
+	n := &netloc{URL: u}
 
+	t.Run("TestListenerOps", func(t *testing.T) {
+
+		rfcl := new(refcntListener)
+
+		t.Run("AddListener", func(t *testing.T) {
+			trans.AddListener(n, rfcl)
+
+			if l, ok := trans.listeners[n.Netloc()]; !ok {
+				t.Error("listener was not added to map")
+			} else if l != rfcl {
+				t.Error("listener pointer mismatch")
+			}
+		})
+
+		t.Run("GetListener", func(t *testing.T) {
+			if l, ok := trans.GetListener(n); !ok {
+				t.Error("listener was not found in map")
+			} else if l != rfcl {
+				t.Error("listener pointer mismatch")
+			}
+		})
+
+		t.Run("DelListener", func(t *testing.T) {
+			trans.DelListener(n)
+			if _, ok := trans.listeners[n.Netloc()]; ok {
+				t.Error("listener not removed")
+			}
+		})
+	})
+
+	t.Run("TestSessionOps", func(t *testing.T) {
+
+		rfcs := new(refcntSession)
+
+		t.Run("AddSession", func(t *testing.T) {
+			trans.AddSession(mockAddrNetloc(n.String()), rfcs)
+
+			if s, ok := trans.sessions[n.String()]; !ok {
+				t.Error("session was not added to map")
+			} else if s != rfcs {
+				t.Error("session pointer mismatch")
+			}
+		})
+
+		t.Run("GetSession", func(t *testing.T) {
+			if s, ok := trans.GetSession(mockAddrNetloc(n.String())); !ok {
+				t.Error("session was not found in map")
+			} else if s != rfcs {
+				t.Error("session pointer mismatch")
+			}
+		})
+
+		t.Run("DelSession", func(t *testing.T) {
+			trans.DelSession(mockAddrNetloc(n.String()))
+			if _, ok := trans.sessions[n.String()]; ok {
+				t.Error("session not removed")
+			}
+		})
+	})
+
+	t.Run("TestRouterOps", func(t *testing.T) {
+		t.Run("RegisterPath", func(t *testing.T) {
+
+		})
+
+		t.Run("UnregisterPath", func(t *testing.T) {
+
+		})
+
+		t.Run("Serve", func(t *testing.T) {
+
+		})
+
+		t.Run("routeStream", func(t *testing.T) {
+
+		})
+	})
 }
 
 // func TestIntegration(t *testing.T) {
