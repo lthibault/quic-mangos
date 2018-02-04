@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sync/atomic"
 
+	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
@@ -15,7 +16,7 @@ import (
 type muxListener interface {
 	LoadListener(netlocator, *tls.Config, *quic.Config) error
 	Accept(string) (net.Conn, error)
-	Close() error
+	Close(string) error
 }
 
 type netlocator interface {
@@ -24,9 +25,24 @@ type netlocator interface {
 }
 
 type refcntListener struct {
+	ctx.Doner
 	gc     func()
 	refcnt int32
 	quic.Listener
+}
+
+func newRefCntListener(n netlocator, l quic.Listener, mux multiplexer) *refcntListener {
+	cq := make(chan struct{})
+	return &refcntListener{
+		Listener: l,
+		refcnt:   1,
+		Doner:    ctx.Lift(cq),
+		gc: func() {
+			close(cq)
+			mux.DelListener(n)
+			mux = nil // for safety.  make sure subsequent usage panics
+		},
+	}
 }
 
 func (r *refcntListener) Incr() *refcntListener {
@@ -35,11 +51,9 @@ func (r *refcntListener) Incr() *refcntListener {
 }
 
 func (r *refcntListener) DecrAndClose() (err error) {
-	if i := atomic.AddInt32(&r.refcnt, -1); i == 0 {
+	if atomic.AddInt32(&r.refcnt, -1) == 0 {
 		err = r.Close()
-		r.gc()
-	} else if i < 0 {
-		err = errors.New("close called on previously-closed Listener")
+		r.gc() // will panic if closed more than once
 	}
 	return
 }
@@ -73,40 +87,35 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 		}
 
 		// Init refcnt to track the Listener's usage and clean up when we're done
-		lm.l = &refcntListener{
-			Listener: ql,
-			refcnt:   1,
-			gc:       func() { lm.mux.DelListener(n) },
-		}
+		lm.l = newRefCntListener(n, ql, lm.mux)
+
 		lm.mux.SetListener(n, lm.l)
 	}
 
 	return nil
 }
 
-func (lm listenMux) Accept(path string) (net.Conn, error) {
+func (lm listenMux) Accept(path string) (conn net.Conn, err error) {
+	chConn := make(chan net.Conn)
 
-	// TODO:  get a session
-	// TODO:  get a stream
-	// TODO:  return &conn{Session: sess, Stream: stream}
+	if err = lm.mux.RegisterPath(path, chConn); err != nil {
+		err = errors.Wrapf(err, "register path %s", path)
+		return
+	}
 
-	// // FROM LISTENER
-	// sess, err := l.muxListener.Accept()
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "accept session")
-	// }
+	// Start the listen loop, which will produce sessions, accept their
+	// streams, and route them to the appropriate endpoint.
+	go ctx.FTick(lm.l, func() {
+		if sess, err := lm.l.Accept(); err == nil {
+			go lm.mux.Serve(sess)
+		}
+	})
 
-	// stream, err := sess.AcceptStream()
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "accept stream")
-	// }
-
-	// &conn{Stream: stream, Session: sess}
-
-	return nil, errors.New("ACCEPT NOT IMPLEMENTED")
+	return <-chConn, nil
 }
 
-func (lm listenMux) Close() error {
+func (lm listenMux) Close(path string) error {
+	lm.mux.UnregisterPath(path)
 	return lm.l.DecrAndClose()
 }
 
@@ -131,6 +140,10 @@ func (l listener) Accept() (mangos.Pipe, error) {
 	}
 
 	return mangos.NewConnPipe(conn, l.sock)
+}
+
+func (l listener) Close() error {
+	return l.muxListener.Close(l.Path)
 }
 
 func (l listener) SetOption(name string, value interface{}) error {
