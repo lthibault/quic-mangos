@@ -7,13 +7,43 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"math/big"
+	"sync"
 
+	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
 )
 
-type options interface {
-	GetOption(string) (interface{}, error)
-	SetOption(string, interface{}) error
+type options struct {
+	sync.RWMutex
+	opt map[string]interface{}
+}
+
+func newOpt() *options { return &options{opt: make(map[string]interface{})} }
+
+// GetOption retrieves an option value.
+func (o *options) get(name string) (interface{}, error) {
+	o.RLock()
+	defer o.RUnlock()
+
+	v, ok := o.opt[name]
+	if !ok {
+		return nil, mangos.ErrBadOption
+	}
+	return v, nil
+}
+
+// SetOption sets an option.  We have none, so just ErrBadOption.
+func (o *options) set(name string, val interface{}) (err error) {
+	o.Lock()
+	defer o.Unlock()
+
+	switch name {
+	case OptionQUICConfig, OptionTLSConfig:
+		o.opt[name] = val
+	default:
+		err = mangos.ErrBadOption
+	}
+	return
 }
 
 // Setup a bare-bones TLS config for the server
@@ -37,15 +67,15 @@ func generateTLSConfig() *tls.Config {
 	return &tls.Config{Certificates: []tls.Certificate{tlsCert}, InsecureSkipVerify: true}
 }
 
-func getQUICCfg(opt options) (tc *tls.Config, qc *quic.Config) {
-	if v, err := opt.GetOption(OptionTLSConfig); err != nil {
+func getQUICCfg(opt *options) (tc *tls.Config, qc *quic.Config) {
+	if v, err := opt.get(OptionTLSConfig); err != nil {
 		tc = generateTLSConfig()
 	} else {
 		tc = v.(*tls.Config)
 	}
 
 	// It's acceptable for qc to be nil
-	if v, err := opt.GetOption(OptionQUICConfig); err == nil {
+	if v, err := opt.get(OptionQUICConfig); err == nil {
 		qc = v.(*quic.Config)
 	}
 

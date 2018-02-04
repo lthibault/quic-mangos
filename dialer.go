@@ -70,11 +70,12 @@ func (dm dialMux) Dial(path string) (net.Conn, error) {
 type dialer struct {
 	netloc
 	*dialMux
-	mangos.Socket
+	opt  *options
+	sock mangos.Socket
 }
 
 func (d dialer) Dial() (mangos.Pipe, error) {
-	tc, qc := getQUICCfg(d.Socket)
+	tc, qc := getQUICCfg(d.opt)
 
 	if err := d.LoadSession(d.netloc, tc, qc); err != nil {
 		return nil, errors.Wrap(err, "dial quic")
@@ -86,4 +87,12 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 	}
 
 	return mangos.NewConnPipe(conn, d.sock)
+}
+
+func (d dialer) GetOption(name string) (v interface{}, err error) {
+	return // TODO
+}
+
+func (d dialer) SetOption(name string, v interface{}) (err error) {
+	return // TODO
 }

@@ -117,11 +117,12 @@ func (lm listenMux) Close(path string) error {
 type listener struct {
 	netloc
 	*listenMux
-	mangos.Socket
+	opt  *options
+	sock mangos.Socket
 }
 
 func (l *listener) Listen() error {
-	tc, qc := getQUICCfg(l.Socket)
+	tc, qc := getQUICCfg(l.opt)
 	return errors.Wrap(l.LoadListener(l.netloc, tc, qc), "listen quic")
 }
 
@@ -131,11 +132,19 @@ func (l listener) Accept() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "mux accept")
 	}
 
-	return mangos.NewConnPipe(conn, l.Socket)
+	return mangos.NewConnPipe(conn, l.sock)
 }
 
 func (l listener) Close() error {
 	return l.listenMux.Close(l.Path)
+}
+
+func (l listener) GetOption(name string) (v interface{}, err error) {
+	return // TODO
+}
+
+func (l listener) SetOption(name string, v interface{}) (err error) {
+	return // TODO
 }
 
 func (l listener) Address() string { return l.URL.String() }

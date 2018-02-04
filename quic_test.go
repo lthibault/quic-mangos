@@ -31,7 +31,7 @@ func TestNewDialer(t *testing.T) {
 			t.Errorf("expected /clean/up, got %s", d.Path)
 		}
 
-		if d.Socket != sock {
+		if d.sock != sock {
 			t.Error("sock parameter points to unexpected location")
 		} else if d.dialMux == nil {
 			t.Error("muxDialer is nil")
@@ -63,7 +63,7 @@ func TestNewListener(t *testing.T) {
 			t.Errorf("expected /clean/up, got %s", l.Path)
 		}
 
-		if l.Socket != sock {
+		if l.sock != sock {
 			t.Error("sock parameter points to unexpected location")
 		} else if l.listenMux == nil {
 			t.Error("listenMux is nil")
