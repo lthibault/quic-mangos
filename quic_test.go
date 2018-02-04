@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/go-mangos/mangos"
-	"github.com/go-mangos/mangos/protocol/pair"
 )
+
+func TestCanary(t *testing.T) {}
 
 type mockAddrNetloc string
 
@@ -88,39 +89,4 @@ func TestNewListener(t *testing.T) {
 			t.Error("should have failed due to invalid URL")
 		}
 	})
-}
-
-func TestIntegration(t *testing.T) {
-	s0, err := pair.NewSocket()
-	if err != nil {
-		t.Errorf("bind sock create: %s", err)
-	}
-
-	s1, err := pair.NewSocket()
-	if err != nil {
-		t.Errorf("conn sock create: %s", err)
-	}
-
-	s0.AddTransport(NewTransport())
-	s1.AddTransport(NewTransport())
-
-	if err = s0.Listen("quic://localhost:9090/test"); err != nil {
-		t.Errorf("s0 listen: %s", err)
-	}
-
-	if err = s1.Dial("quic://localhost:9090/test"); err != nil {
-		t.Errorf("s1 dial: %s", err)
-	}
-
-	t.Log(" SENDING ...")
-	if err = s0.Send([]byte("OH HAI!")); err != nil {
-		t.Errorf("send: %s", err)
-	}
-
-	t.Log(" RECVING ...")
-	if b, err := s1.Recv(); err != nil {
-		t.Errorf("recv: %s", err)
-	} else {
-		t.Log("[ RECV ] ", string(b))
-	}
 }
