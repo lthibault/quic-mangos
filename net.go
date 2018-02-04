@@ -153,21 +153,15 @@ func (r *router) Del(path string) {
 }
 
 type refcntSession struct {
-	// ctx.Doner
 	gc     func()
 	refcnt int32
 	quic.Session
 }
 
 func newRefCntSession(sess quic.Session, d sessionDropper) *refcntSession {
-	// cq := make(chan struct{})
 	return &refcntSession{
 		Session: sess,
-		// Doner:   ctx.Lift(cq),
-		gc: func() {
-			// close(cq)
-			d.DelSession(sess.RemoteAddr())
-		},
+		gc:      func() { d.DelSession(sess.RemoteAddr()) },
 	}
 }
 
