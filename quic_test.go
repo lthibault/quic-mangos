@@ -8,12 +8,6 @@ import (
 
 func TestCanary(t *testing.T) {}
 
-type mockAddrNetloc string
-
-func (mockAddrNetloc) Network() string  { return "quic" }
-func (m mockAddrNetloc) String() string { return string(m) }
-func (m mockAddrNetloc) Netloc() string { return m.String() }
-
 func TestNewTransport(t *testing.T) {
 	trans := NewTransport().(*transport)
 	if trans.opt == nil {
