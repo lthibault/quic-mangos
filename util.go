@@ -11,6 +11,11 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 )
 
+type options interface {
+	GetOption(string) (interface{}, error)
+	SetOption(string, interface{}) error
+}
+
 // Setup a bare-bones TLS config for the server
 func generateTLSConfig() *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -32,15 +37,15 @@ func generateTLSConfig() *tls.Config {
 	return &tls.Config{Certificates: []tls.Certificate{tlsCert}, InsecureSkipVerify: true}
 }
 
-func getQUICCfg(opt *options) (tc *tls.Config, qc *quic.Config) {
-	if v, err := opt.get(OptionTLSConfig); err != nil {
+func getQUICCfg(opt options) (tc *tls.Config, qc *quic.Config) {
+	if v, err := opt.GetOption(OptionTLSConfig); err != nil {
 		tc = generateTLSConfig()
 	} else {
 		tc = v.(*tls.Config)
 	}
 
 	// It's acceptable for qc to be nil
-	if v, err := opt.get(OptionQUICConfig); err == nil {
+	if v, err := opt.GetOption(OptionQUICConfig); err == nil {
 		qc = v.(*quic.Config)
 	}
 

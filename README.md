@@ -42,5 +42,3 @@ sock.AddTransport(quic.NewTransport())
 _ = sock.Listen("quic://127.0.0.1:9001/foo/bar")
 
 ```
-
-

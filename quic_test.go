@@ -9,11 +9,8 @@ import (
 func TestCanary(t *testing.T) {}
 
 func TestNewTransport(t *testing.T) {
-	trans := NewTransport().(*transport)
-	if trans.opt == nil {
-		t.Error("opt is nil")
-	} else if trans.Scheme() != "quic" {
-		t.Errorf("expected sheme to be `quic `, got %s", trans.Scheme())
+	if NewTransport().Scheme() != "quic" {
+		t.Errorf("expected sheme to be `quic `, got %s", NewTransport().Scheme())
 	}
 }
 
@@ -34,9 +31,7 @@ func TestNewDialer(t *testing.T) {
 			t.Errorf("expected /clean/up, got %s", d.Path)
 		}
 
-		if d.opt == nil {
-			t.Error("opt is nil")
-		} else if d.sock != sock {
+		if d.Socket != sock {
 			t.Error("sock parameter points to unexpected location")
 		} else if d.dialMux == nil {
 			t.Error("muxDialer is nil")
@@ -68,9 +63,7 @@ func TestNewListener(t *testing.T) {
 			t.Errorf("expected /clean/up, got %s", l.Path)
 		}
 
-		if l.opt == nil {
-			t.Error("opt is nil")
-		} else if l.sock != sock {
+		if l.Socket != sock {
 			t.Error("sock parameter points to unexpected location")
 		} else if l.listenMux == nil {
 			t.Error("listenMux is nil")
