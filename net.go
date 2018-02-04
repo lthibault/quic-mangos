@@ -56,7 +56,7 @@ type dialMuxer interface {
 type (
 	listenNegotiator interface {
 		ReadHeaders() (string, error)
-		Abort(int, string)
+		Abort(int, string) error
 		Accept() error
 	}
 
@@ -106,10 +106,10 @@ func (n negotiator) ReadHeaders() (path string, err error) {
 	return
 }
 
-func (n negotiator) Abort(status int, message string) {
+func (n negotiator) Abort(status int, message string) error {
 	buf := bytes.NewBufferString(fmt.Sprintf("%d:%s", status, message))
 	_, _ = io.Copy(n, buf) // best-effort
-	_ = n.Close()
+	return n.Close()
 }
 
 func (n negotiator) Accept() (err error) {
