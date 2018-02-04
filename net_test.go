@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"net"
 	"net/url"
 	"testing"
 )
@@ -89,7 +90,34 @@ func TestNegotiator(t *testing.T) {
 }
 
 func TestRouter(t *testing.T) {
+	r := newRouter()
+	ch := make(chan net.Conn)
+	const path = "/some/path"
 
+	t.Run("Add", func(t *testing.T) {
+		if !r.Add(path, ch) {
+			t.Errorf("failed to add channel to path %s", path)
+		}
+
+		if r.Add(path, ch) {
+			t.Error("slot not detected as occupied")
+		}
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		if c, ok := r.Get(path); !ok {
+			t.Error("value not retrieved")
+		} else if c != ch {
+			t.Error("mismatch between retrieved values")
+		}
+	})
+
+	t.Run("Del", func(t *testing.T) {
+		r.Del(path)
+		if _, ok := r.Get(path); ok {
+			t.Error("value not deleted")
+		}
+	})
 }
 
 func TestRefcntSession(t *testing.T) {
