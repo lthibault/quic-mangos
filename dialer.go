@@ -26,7 +26,7 @@ func newDialMux(sock mangos.Socket, m multiplexer) *dialMux {
 	return &dialMux{sock: sock, mux: m}
 }
 
-func (dm dialMux) LoadSession(n netlocator, tc *tls.Config, qc *quic.Config) error {
+func (dm *dialMux) LoadSession(n netlocator, tc *tls.Config, qc *quic.Config) error {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 
