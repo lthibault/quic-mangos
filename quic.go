@@ -2,7 +2,6 @@ package quic
 
 import (
 	"net/url"
-	"path/filepath"
 
 	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
@@ -27,8 +26,6 @@ func (t transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer
 		return nil, errors.Wrap(err, "url parse")
 	}
 
-	u.Path = filepath.Clean(u.Path)
-
 	return &dialer{
 		netloc:  netloc{u},
 		Socket:  sock,
@@ -41,8 +38,6 @@ func (t transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	if err != nil {
 		return nil, errors.Wrap(err, "url parse")
 	}
-
-	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
 		netloc:    netloc{u},
