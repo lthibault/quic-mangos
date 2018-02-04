@@ -23,6 +23,32 @@ type netloc struct{ *url.URL }
 
 func (n netloc) Netloc() string { return n.Host }
 
+// multiplexer provides an interface to multiplex sockets onto QUIC sessions
+type multiplexer interface {
+	sync.Locker
+
+	GetListener(netlocator) (*refcntListener, bool)
+	AddListener(netlocator, *refcntListener)
+	DelListener(netlocator)
+
+	GetSession(netlocator) (*refcntSession, bool)
+	AddSession(fmt.Stringer, *refcntSession)
+	DelSession(fmt.Stringer)
+
+	RegisterPath(string, chan<- net.Conn) error
+	UnregisterPath(string)
+	Serve(quic.Session)
+}
+
+// dialMuxer is a subset of multiplexer, used for mangos.PipeDialer
+type dialMuxer interface {
+	sync.Locker
+
+	GetSession(netlocator) (*refcntSession, bool)
+	AddSession(fmt.Stringer, *refcntSession)
+	DelSession(fmt.Stringer)
+}
+
 type (
 	listenNegotiator interface {
 		ReadHeaders() (string, error)

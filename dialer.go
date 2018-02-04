@@ -17,7 +17,7 @@ type muxDialer interface {
 }
 
 type dialMux struct {
-	mux  multiplexer
+	mux  dialMuxer
 	sess *refcntSession
 	sock mangos.Socket
 }

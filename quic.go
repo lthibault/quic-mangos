@@ -48,23 +48,6 @@ func (o *options) set(name string, val interface{}) error {
 	return mangos.ErrBadOption
 }
 
-type multiplexer interface {
-	sync.Locker
-
-	GetListener(netlocator) (*refcntListener, bool)
-	AddListener(netlocator, *refcntListener)
-	DelListener(netlocator)
-
-	GetSession(netlocator) (*refcntSession, bool)
-	AddSession(fmt.Stringer, *refcntSession)
-	DelSession(fmt.Stringer)
-
-	RegisterPath(string, chan<- net.Conn) error
-	UnregisterPath(string)
-
-	Serve(quic.Session)
-}
-
 type transport struct {
 	sync.Mutex
 	opt *options
