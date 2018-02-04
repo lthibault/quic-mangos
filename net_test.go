@@ -121,7 +121,49 @@ func TestRouter(t *testing.T) {
 }
 
 func TestRefcntSession(t *testing.T) {
+	sess := &mockSess{}
+	rfcs := newRefCntSession(sess, mux{})
 
+	t.Run("CtrDefault=0", func(t *testing.T) {
+		if rfcs.refcnt != 0 {
+			t.Errorf("expected 0, got %d", rfcs.refcnt)
+		}
+	})
+
+	t.Run("CtrIncr", func(t *testing.T) {
+		if rfcs.Incr().refcnt != 1 {
+			t.Errorf("expected 1, got %d", rfcs.refcnt)
+		}
+	})
+
+	t.Run("DecrAndClose", func(t *testing.T) {
+		t.Run("Decr", func(t *testing.T) {
+			if err := rfcs.Incr().DecrAndClose(); err != nil {
+				t.Error(err)
+			} else if rfcs.refcnt != 1 {
+				t.Errorf("expected 1, got %d", rfcs.refcnt)
+			}
+		})
+
+		t.Run("Close", func(t *testing.T) {
+			if err := rfcs.DecrAndClose(); err != nil {
+				t.Error(err)
+			} else if !sess.closed {
+				t.Error("session not closed")
+			} else if rfcs.refcnt != 0 {
+				t.Errorf("expected 0, got %d", rfcs.refcnt)
+			}
+		})
+
+		t.Run("OverClose", func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("should have panicked")
+				}
+			}()
+			rfcs.DecrAndClose()
+		})
+	})
 }
 
 func TestMultiplexer(t *testing.T) {
