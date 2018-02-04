@@ -11,11 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type muxDialer interface {
-	LoadSession(netlocator, *tls.Config, *quic.Config) error
-	Dial(string) (net.Conn, error)
-}
-
 type dialMux struct {
 	mux  dialMuxer
 	sess *refcntSession
@@ -75,7 +70,7 @@ func (dm dialMux) Dial(path string) (net.Conn, error) {
 type dialer struct {
 	netloc
 
-	muxDialer
+	*dialMux
 
 	opt  *options
 	sock mangos.Socket
@@ -88,7 +83,7 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "dial quic")
 	}
 
-	conn, err := d.muxDialer.Dial(d.Path)
+	conn, err := d.dialMux.Dial(d.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "dial path")
 	}

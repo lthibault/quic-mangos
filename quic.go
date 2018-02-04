@@ -67,10 +67,10 @@ func (t *transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDiale
 	u.Path = filepath.Clean(u.Path)
 
 	return &dialer{
-		netloc:    netloc{u},
-		opt:       t.opt,
-		sock:      sock,
-		muxDialer: newDialMux(sock, t),
+		netloc:  netloc{u},
+		opt:     t.opt,
+		sock:    sock,
+		dialMux: newDialMux(sock, t),
 	}, nil
 }
 
@@ -83,10 +83,10 @@ func (t *transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeLis
 	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
-		netloc:      netloc{u},
-		opt:         t.opt,
-		sock:        sock,
-		muxListener: newListenMux(t),
+		netloc:    netloc{u},
+		opt:       t.opt,
+		sock:      sock,
+		listenMux: newListenMux(t),
 	}, nil
 }
 

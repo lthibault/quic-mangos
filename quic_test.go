@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-mangos/mangos"
+	"github.com/go-mangos/mangos/protocol/pair"
 )
 
 type mockAddrNetloc string
@@ -50,7 +51,7 @@ func TestNewDialer(t *testing.T) {
 			t.Error("opt is nil")
 		} else if d.sock != sock {
 			t.Error("sock parameter points to unexpected location")
-		} else if d.muxDialer == nil {
+		} else if d.dialMux == nil {
 			t.Error("muxDialer is nil")
 		}
 	})
@@ -84,8 +85,8 @@ func TestNewListener(t *testing.T) {
 			t.Error("opt is nil")
 		} else if l.sock != sock {
 			t.Error("sock parameter points to unexpected location")
-		} else if l.muxListener == nil {
-			t.Error("muxListener is nil")
+		} else if l.listenMux == nil {
+			t.Error("listenMux is nil")
 		}
 	})
 
@@ -203,37 +204,37 @@ func TestMultiplexer(t *testing.T) {
 	})
 }
 
-// func TestIntegration(t *testing.T) {
-// 	s0, err := pair.NewSocket()
-// 	if err != nil {
-// 		t.Errorf("bind sock create: %s", err)
-// 	}
+func TestIntegration(t *testing.T) {
+	s0, err := pair.NewSocket()
+	if err != nil {
+		t.Errorf("bind sock create: %s", err)
+	}
 
-// 	s1, err := pair.NewSocket()
-// 	if err != nil {
-// 		t.Errorf("conn sock create: %s", err)
-// 	}
+	s1, err := pair.NewSocket()
+	if err != nil {
+		t.Errorf("conn sock create: %s", err)
+	}
 
-// 	s0.AddTransport(NewTransport())
-// 	s1.AddTransport(NewTransport())
+	s0.AddTransport(NewTransport())
+	s1.AddTransport(NewTransport())
 
-// 	if err = s0.Listen("quic://localhost:9090/"); err != nil {
-// 		t.Errorf("s0 listen: %s", err)
-// 	}
+	if err = s0.Listen("quic://localhost:9090/test"); err != nil {
+		t.Errorf("s0 listen: %s", err)
+	}
 
-// 	if err = s1.Dial("quic://localhost:9090/"); err != nil {
-// 		t.Errorf("s1 dial: %s", err)
-// 	}
+	if err = s1.Dial("quic://localhost:9090/test"); err != nil {
+		t.Errorf("s1 dial: %s", err)
+	}
 
-// 	t.Log(" SENDING ...")
-// 	if err = s0.Send([]byte("OH HAI!")); err != nil {
-// 		t.Errorf("send: %s", err)
-// 	}
+	t.Log(" SENDING ...")
+	if err = s0.Send([]byte("OH HAI!")); err != nil {
+		t.Errorf("send: %s", err)
+	}
 
-// 	t.Log(" RECVING ...")
-// 	if b, err := s1.Recv(); err != nil {
-// 		t.Errorf("recv: %s", err)
-// 	} else {
-// 		t.Log("[ RECV ] ", string(b))
-// 	}
-// }
+	t.Log(" RECVING ...")
+	if b, err := s1.Recv(); err != nil {
+		t.Errorf("recv: %s", err)
+	} else {
+		t.Log("[ RECV ] ", string(b))
+	}
+}

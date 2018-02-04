@@ -11,12 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type muxListener interface {
-	LoadListener(netlocator, *tls.Config, *quic.Config) error
-	Accept(string) (net.Conn, error)
-	Close(string) error
-}
-
 type listenDeleter interface {
 	DelListener(netlocator)
 }
@@ -115,7 +109,7 @@ func (lm listenMux) Close(path string) error {
 type listener struct {
 	netloc
 
-	muxListener
+	*listenMux
 
 	opt  *options
 	sock mangos.Socket
@@ -127,7 +121,7 @@ func (l *listener) Listen() error {
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	conn, err := l.muxListener.Accept(l.Path)
+	conn, err := l.listenMux.Accept(l.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "mux accept")
 	}
@@ -136,7 +130,7 @@ func (l listener) Accept() (mangos.Pipe, error) {
 }
 
 func (l listener) Close() error {
-	return l.muxListener.Close(l.Path)
+	return l.listenMux.Close(l.Path)
 }
 
 func (l listener) SetOption(name string, value interface{}) error {
