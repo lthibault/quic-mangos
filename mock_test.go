@@ -21,10 +21,17 @@ func (m mockAddrNetloc) String() string { return string(m) }
 func (m mockAddrNetloc) Netloc() string { return m.String() }
 
 type mockLstn struct {
-	closed bool
+	closed      bool
+	sessFactory func() *mockSess
 }
 
-func (mockLstn) Accept() (quic.Session, error)  { return &mockSess{}, nil }
+func (m mockLstn) Accept() (quic.Session, error) {
+	if m.sessFactory == nil {
+		return &mockSess{}, nil
+	}
+	return m.sessFactory(), nil
+}
+
 func (mockLstn) Addr() net.Addr                 { return mockAddrNetloc("") }
 func (mockLstn) Listen() (quic.Listener, error) { return nil, nil }
 func (m *mockLstn) Close() error {
@@ -33,11 +40,19 @@ func (m *mockLstn) Close() error {
 }
 
 type mockSess struct {
-	closed bool
+	closed         bool
+	contextFactory func() context.Context
 }
 
-func (mockSess) AcceptStream() (quic.Stream, error)   { return nil, nil }
-func (mockSess) Context() context.Context             { return context.TODO() }
+func (mockSess) AcceptStream() (quic.Stream, error) { return nil, nil }
+
+func (m mockSess) Context() context.Context {
+	if m.contextFactory == nil {
+		return context.TODO()
+	}
+	return m.contextFactory()
+}
+
 func (mockSess) LocalAddr() net.Addr                  { return mockAddrNetloc("") }
 func (mockSess) OpenStream() (quic.Stream, error)     { return nil, nil }
 func (mockSess) OpenStreamSync() (quic.Stream, error) { return nil, nil }
