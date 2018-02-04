@@ -17,13 +17,13 @@ type dialMux struct {
 	sock mangos.Socket
 }
 
-func newDialMux(sock mangos.Socket, m multiplexer) *dialMux {
+func newDialMux(sock mangos.Socket, m dialMuxer) *dialMux {
 	return &dialMux{sock: sock, mux: m}
 }
 
 func (dm *dialMux) LoadSession(n netlocator, tc *tls.Config, qc *quic.Config) error {
-	lock.Lock()
-	defer lock.Unlock()
+	dm.mux.Lock()
+	defer dm.mux.Unlock()
 
 	var ok bool
 	if dm.sess, ok = dm.mux.GetSession(n); !ok {

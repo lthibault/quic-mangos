@@ -4,7 +4,7 @@ import "testing"
 
 func TestRefcntListener(t *testing.T) {
 	l := &mockLstn{}
-	rfcl := newRefCntListener(mockAddrNetloc(""), l, mux{})
+	rfcl := newRefCntListener(mockAddrNetloc(""), l, mux)
 
 	t.Run("CtrDefault=0", func(t *testing.T) {
 		if rfcl.refcnt != 0 {

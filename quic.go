@@ -31,7 +31,7 @@ func (t transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer
 	return &dialer{
 		netloc:  netloc{u},
 		Socket:  sock,
-		dialMux: newDialMux(sock, mux{}),
+		dialMux: newDialMux(sock, mux),
 	}, nil
 }
 
@@ -46,7 +46,7 @@ func (t transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 	return &listener{
 		netloc:    netloc{u},
 		Socket:    sock,
-		listenMux: newListenMux(mux{}),
+		listenMux: newListenMux(mux),
 	}, nil
 }
 

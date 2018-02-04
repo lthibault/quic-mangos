@@ -16,12 +16,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	lock      sync.Mutex
-	listeners = make(map[string]*refcntListener)
-	sessions  = make(map[string]*refcntSession)
-	routes    = newRouter()
-)
+var mux = newMux()
 
 type netlocator interface {
 	Netloc() string
@@ -35,90 +30,86 @@ type sessionDropper interface {
 	DelSession(net.Addr)
 }
 
-type (
-	// multiplexer provides an interface to multiplex sockets onto QUIC sessions
-	multiplexer interface {
-		GetListener(netlocator) (*refcntListener, bool)
-		AddListener(netlocator, *refcntListener)
-		DelListener(netlocator)
+type dialMuxer interface {
+	sync.Locker
+	GetSession(netlocator) (*refcntSession, bool)
+	AddSession(net.Addr, *refcntSession)
+	sessionDropper
+}
 
-		GetSession(netlocator) (*refcntSession, bool)
-		AddSession(net.Addr, *refcntSession)
-		sessionDropper
+type multiplexer struct {
+	sync.Mutex
+	listeners map[string]*refcntListener
+	sessions  map[string]*refcntSession
+	routes    *router
+}
 
-		RegisterPath(string, chan<- net.Conn) error
-		UnregisterPath(string)
-		Serve(quic.Session)
+func newMux() *multiplexer {
+	return &multiplexer{
+		listeners: make(map[string]*refcntListener),
+		sessions:  make(map[string]*refcntSession),
+		routes:    newRouter(),
 	}
+}
 
-	// dialMuxer is a subset of multiplexer, used for mangos.PipeDialer
-	dialMuxer interface {
-		GetSession(netlocator) (*refcntSession, bool)
-		AddSession(net.Addr, *refcntSession)
-		sessionDropper
-	}
-)
-
-type mux struct{}
-
-func (mux) GetListener(n netlocator) (l *refcntListener, ok bool) {
-	l, ok = listeners[n.Netloc()]
+func (m *multiplexer) GetListener(n netlocator) (l *refcntListener, ok bool) {
+	l, ok = m.listeners[n.Netloc()]
 	return
 }
 
-func (mux) AddListener(n netlocator, l *refcntListener) {
-	listeners[n.Netloc()] = l
+func (m *multiplexer) AddListener(n netlocator, l *refcntListener) {
+	m.listeners[n.Netloc()] = l
 }
 
-func (mux) DelListener(n netlocator) {
-	lock.Lock()
-	delete(listeners, n.Netloc())
-	lock.Unlock()
+func (m *multiplexer) DelListener(n netlocator) {
+	m.Lock()
+	delete(m.listeners, n.Netloc())
+	m.Unlock()
 }
 
-func (mux) GetSession(n netlocator) (s *refcntSession, ok bool) {
-	s, ok = sessions[n.Netloc()]
+func (m *multiplexer) GetSession(n netlocator) (s *refcntSession, ok bool) {
+	s, ok = m.sessions[n.Netloc()]
 	return
 }
 
-func (mux) AddSession(a net.Addr, sess *refcntSession) {
-	sessions[a.String()] = sess
+func (m *multiplexer) AddSession(a net.Addr, sess *refcntSession) {
+	m.sessions[a.String()] = sess
 }
 
-func (mux) DelSession(a net.Addr) {
-	lock.Lock()
-	delete(sessions, a.String())
-	lock.Unlock()
+func (m *multiplexer) DelSession(a net.Addr) {
+	m.Lock()
+	delete(m.sessions, a.String())
+	m.Unlock()
 }
 
-func (mux) RegisterPath(path string, ch chan<- net.Conn) (err error) {
-	if !routes.Add(path, ch) {
+func (m *multiplexer) RegisterPath(path string, ch chan<- net.Conn) (err error) {
+	if !m.routes.Add(path, ch) {
 		err = errors.Errorf("route already registered for %s", path)
 	}
 	return
 }
 
-func (mux) UnregisterPath(path string) { routes.Del(path) }
+func (m *multiplexer) UnregisterPath(path string) { m.routes.Del(path) }
 
-func (mux) Serve(sess quic.Session) {
+func (m *multiplexer) Serve(sess quic.Session) {
 	for _ = range ctx.Tick(sess.Context()) {
 		stream, err := sess.AcceptStream()
 		if err != nil {
 			continue
 		}
 
-		go routeStream(sess, stream)
+		go m.routeStream(sess, stream)
 	}
 }
 
-func routeStream(sess quic.Session, stream quic.Stream) {
+func (m *multiplexer) routeStream(sess quic.Session, stream quic.Stream) {
 	var n listenNegotiator = newNegotiator(stream)
 
 	path, err := n.ReadHeaders()
 	if err != nil {
 		n.Abort(400, err.Error())
 		return
-	} else if ch, ok := routes.Get(path); !ok {
+	} else if ch, ok := m.routes.Get(path); !ok {
 		n.Abort(404, path)
 		return
 	} else if err = n.Accept(); err != nil {

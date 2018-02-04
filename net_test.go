@@ -122,7 +122,7 @@ func TestRouter(t *testing.T) {
 
 func TestRefcntSession(t *testing.T) {
 	sess := &mockSess{}
-	rfcs := newRefCntSession(sess, mux{})
+	rfcs := newRefCntSession(sess, newMux())
 
 	t.Run("CtrDefault=0", func(t *testing.T) {
 		if rfcs.refcnt != 0 {
@@ -167,7 +167,7 @@ func TestRefcntSession(t *testing.T) {
 }
 
 func TestMultiplexer(t *testing.T) {
-	mx := mux{}
+	mx := newMux()
 	u, _ := url.ParseRequestURI("quic://127.0.0.1:9001/hello")
 	n := &netloc{URL: u}
 
@@ -178,7 +178,7 @@ func TestMultiplexer(t *testing.T) {
 		t.Run("AddListener", func(t *testing.T) {
 			mx.AddListener(n, rfcl)
 
-			if l, ok := listeners[n.Netloc()]; !ok {
+			if l, ok := mx.listeners[n.Netloc()]; !ok {
 				t.Error("listener was not added to map")
 			} else if l != rfcl {
 				t.Error("listener pointer mismatch")
@@ -195,7 +195,7 @@ func TestMultiplexer(t *testing.T) {
 
 		t.Run("DelListener", func(t *testing.T) {
 			mx.DelListener(n)
-			if _, ok := listeners[n.Netloc()]; ok {
+			if _, ok := mx.listeners[n.Netloc()]; ok {
 				t.Error("listener not removed")
 			}
 		})
@@ -208,7 +208,7 @@ func TestMultiplexer(t *testing.T) {
 		t.Run("AddSession", func(t *testing.T) {
 			mx.AddSession(mockAddrNetloc(n.String()), rfcs)
 
-			if s, ok := sessions[n.String()]; !ok {
+			if s, ok := mx.sessions[n.String()]; !ok {
 				t.Error("session was not added to map")
 			} else if s != rfcs {
 				t.Error("session pointer mismatch")
@@ -225,7 +225,7 @@ func TestMultiplexer(t *testing.T) {
 
 		t.Run("DelSession", func(t *testing.T) {
 			mx.DelSession(mockAddrNetloc(n.String()))
-			if _, ok := sessions[n.String()]; ok {
+			if _, ok := mx.sessions[n.String()]; ok {
 				t.Error("session not removed")
 			}
 		})
@@ -251,7 +251,7 @@ func TestMultiplexer(t *testing.T) {
 		t.Run("UnregisterPath", func(t *testing.T) {
 			t.Run("SlotOccupied", func(t *testing.T) {
 				mx.UnregisterPath(n.Path)
-				if _, ok := routes.Get(n.Path); ok {
+				if _, ok := mx.routes.Get(n.Path); ok {
 					t.Error("value not removed from radix tree")
 				}
 			})
