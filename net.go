@@ -118,6 +118,8 @@ type router struct {
 	routes *radix.Tree
 }
 
+func newRouter() *router { return &router{routes: radix.New()} }
+
 func (r *router) Get(path string) (ch chan<- net.Conn, ok bool) {
 	r.RLock()
 	defer r.RUnlock()

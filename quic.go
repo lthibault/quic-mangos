@@ -163,5 +163,8 @@ func (t *transport) routeStream(sess quic.Session, stream quic.Stream) {
 func NewTransport() mangos.Transport {
 	return &transport{opt: &options{
 		opt: make(map[string]interface{})},
+		routes:    newRouter(),
+		listeners: make(map[string]*refcntListener),
+		sessions:  make(map[string]*refcntSession),
 	}
 }
