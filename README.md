@@ -11,10 +11,6 @@ QUIC-mangos brings the low latency and multiplexed streaming of the [QUIC](https
 URL paths passed to `sock.Listen` and `sock.Dial` are mapped to a separate QUIC
 stream, allowing several `mangos.Socket`s to share a single port mapping.
 
-Thus two sockets can dial/listen to `quic://127.0.0.1:9001/foo/bar` and
-`quic://127.0.0.1:9001/foo/qux`, respectively, and they will share both an
-underlying QUIC session (roughly equivalent to a TCP connection) and an OS port.
-
 Moreover, QUIC is designed with the modern web in mind and performs significantly
 better than TCP over lossy connections.  It also features mandatory TLS
 encryption, which is configruable via socket options.
