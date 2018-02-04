@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"net"
 	"net/url"
 	"testing"
 
@@ -163,20 +164,42 @@ func TestMultiplexer(t *testing.T) {
 
 	t.Run("TestRouterOps", func(t *testing.T) {
 		t.Run("RegisterPath", func(t *testing.T) {
+			ch := make(chan net.Conn)
 
+			t.Run("SlotFree", func(t *testing.T) {
+				if err := trans.RegisterPath(n.Path, ch); err != nil {
+					t.Error(err)
+				}
+			})
+
+			t.Run("SlotOccupied", func(t *testing.T) {
+				if err := trans.RegisterPath(n.Path, ch); err == nil {
+					t.Errorf("expected %s to be occupied, was free", n.Path)
+				}
+			})
 		})
 
 		t.Run("UnregisterPath", func(t *testing.T) {
+			t.Run("SlotOccupied", func(t *testing.T) {
+				trans.UnregisterPath(n.Path)
+				if _, ok := trans.routes.Get(n.Path); ok {
+					t.Error("value not removed from radix tree")
+				}
+			})
 
+			t.Run("SlotFree", func(t *testing.T) {
+				trans.UnregisterPath(n.Path)
+				// make sure nothing weird happens (e.g. panics)
+			})
 		})
 
-		t.Run("Serve", func(t *testing.T) {
+		// t.Run("Serve", func(t *testing.T) {
+		// this is too hard to test for now ... :/
+		// })
 
-		})
-
-		t.Run("routeStream", func(t *testing.T) {
-
-		})
+		// t.Run("routeStream", func(t *testing.T) {
+		// this is too hard to test for now ... :/
+		// })
 	})
 }
 

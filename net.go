@@ -138,10 +138,11 @@ func (r *router) Get(path string) (ch chan<- net.Conn, ok bool) {
 
 func (r *router) Add(path string, ch chan<- net.Conn) (ok bool) {
 	r.Lock()
-	if _, ok = r.routes.Get(path); ok {
+	if _, ok = r.routes.Get(path); !ok {
 		r.routes.Insert(path, ch)
 	}
 	r.Unlock()
+	ok = !ok // turn "value not found" into "value successfully inserted"
 	return
 }
 
