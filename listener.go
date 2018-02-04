@@ -34,12 +34,17 @@ func newRefCntListener(n netlocator, l quic.Listener, d listenDeleter) *refcntLi
 	}
 }
 
-func (r *refcntListener) Incr() { atomic.AddInt32(&r.refcnt, 1) }
+func (r *refcntListener) Incr() *refcntListener {
+	atomic.AddInt32(&r.refcnt, 1)
+	return r
+}
 
 func (r *refcntListener) DecrAndClose() (err error) {
-	if atomic.AddInt32(&r.refcnt, -1) == 0 {
+	if i := atomic.AddInt32(&r.refcnt, -1); i == 0 {
 		err = r.Close()
-		r.gc() // will panic if closed more than once
+		r.gc()
+	} else if i < 0 {
+		panic("already closed")
 	}
 	return
 }

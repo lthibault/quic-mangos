@@ -130,7 +130,7 @@ func TestRefcntSession(t *testing.T) {
 		}
 	})
 
-	t.Run("CtrIncr", func(t *testing.T) {
+	t.Run("Incr", func(t *testing.T) {
 		if rfcs.Incr().refcnt != 1 {
 			t.Errorf("expected 1, got %d", rfcs.refcnt)
 		}
