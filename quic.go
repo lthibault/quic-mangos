@@ -52,8 +52,12 @@ type multiplexer interface {
 	sync.Locker
 
 	GetListener(netlocator) (*refcntListener, bool)
-	SetListener(netlocator, *refcntListener)
+	AddListener(netlocator, *refcntListener)
 	DelListener(netlocator)
+
+	GetSession(netlocator) (*refcntSession, bool)
+	AddSession(fmt.Stringer, *refcntSession)
+	DelSession(fmt.Stringer)
 
 	RegisterPath(string, chan<- net.Conn) error
 	UnregisterPath(string)
@@ -67,6 +71,7 @@ type transport struct {
 
 	routes    *router
 	listeners map[string]*refcntListener
+	sessions  map[string]*refcntSession
 }
 
 func (*transport) Scheme() string { return "quic" }
@@ -80,9 +85,10 @@ func (t *transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDiale
 	u.Path = filepath.Clean(u.Path)
 
 	return &dialer{
-		URL:  u,
-		opt:  t.opt,
-		sock: sock,
+		netloc:    netloc{u},
+		opt:       t.opt,
+		sock:      sock,
+		muxDialer: newDialMux(sock, t),
 	}, nil
 }
 
@@ -95,30 +101,41 @@ func (t *transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeLis
 	u.Path = filepath.Clean(u.Path)
 
 	return &listener{
-		URL:         u,
+		netloc:      netloc{u},
 		opt:         t.opt,
 		sock:        sock,
 		muxListener: newListenMux(t),
 	}, nil
 }
 
-func netlocStr(n netlocator) string {
-	return fmt.Sprintf("%s:%s", n.Hostname(), n.Port())
-}
-
 // Implement multiplexer
 func (t *transport) GetListener(n netlocator) (l *refcntListener, ok bool) {
-	l, ok = t.listeners[netlocStr(n)]
+	l, ok = t.listeners[n.Netloc()]
 	return
 }
 
-func (t *transport) SetListener(n netlocator, l *refcntListener) {
-	t.listeners[netlocStr(n)] = l
+func (t *transport) AddListener(n netlocator, l *refcntListener) {
+	t.listeners[n.Netloc()] = l
 }
 
 func (t *transport) DelListener(n netlocator) {
 	t.Lock()
-	delete(t.listeners, netlocStr(n))
+	delete(t.listeners, n.Netloc())
+	t.Unlock()
+}
+
+func (t *transport) GetSession(n netlocator) (s *refcntSession, ok bool) {
+	s, ok = t.sessions[n.Netloc()]
+	return
+}
+
+func (t *transport) AddSession(s fmt.Stringer, sess *refcntSession) {
+	t.sessions[s.String()] = sess
+}
+
+func (t *transport) DelSession(s fmt.Stringer) {
+	t.Lock()
+	delete(t.sessions, s.String())
 	t.Unlock()
 }
 
@@ -143,7 +160,7 @@ func (t *transport) Serve(sess quic.Session) {
 }
 
 func (t *transport) routeStream(sess quic.Session, stream quic.Stream) {
-	n := newNegotiator(stream)
+	var n listenNegotiator = newNegotiator(stream)
 
 	path, err := n.ReadHeaders()
 	if err != nil {

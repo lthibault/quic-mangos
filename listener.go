@@ -2,9 +2,7 @@ package quic
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
-	"net/url"
 	"sync/atomic"
 
 	"github.com/SentimensRG/ctx"
@@ -19,9 +17,8 @@ type muxListener interface {
 	Close(string) error
 }
 
-type netlocator interface {
-	Hostname() string
-	Port() string
+type listenDeleter interface {
+	DelListener(netlocator)
 }
 
 type refcntListener struct {
@@ -31,24 +28,19 @@ type refcntListener struct {
 	quic.Listener
 }
 
-func newRefCntListener(n netlocator, l quic.Listener, mux multiplexer) *refcntListener {
+func newRefCntListener(n netlocator, l quic.Listener, d listenDeleter) *refcntListener {
 	cq := make(chan struct{})
 	return &refcntListener{
 		Listener: l,
-		refcnt:   1,
 		Doner:    ctx.Lift(cq),
 		gc: func() {
 			close(cq)
-			mux.DelListener(n)
-			mux = nil // for safety.  make sure subsequent usage panics
+			d.DelListener(n)
 		},
 	}
 }
 
-func (r *refcntListener) Incr() *refcntListener {
-	atomic.AddInt32(&r.refcnt, 1)
-	return r
-}
+func (r *refcntListener) Incr() { atomic.AddInt32(&r.refcnt, 1) }
 
 func (r *refcntListener) DecrAndClose() (err error) {
 	if atomic.AddInt32(&r.refcnt, -1) == 0 {
@@ -68,11 +60,6 @@ func newListenMux(m multiplexer) *listenMux {
 	return &listenMux{mux: m}
 }
 
-func listenQUIC(n netlocator, tc *tls.Config, qc *quic.Config) (quic.Listener, error) {
-	netloc := fmt.Sprintf("%s:%s", n.Hostname(), n.Port())
-	return quic.ListenAddr(netloc, tc, qc)
-}
-
 func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config) error {
 	lm.mux.Lock()
 	defer lm.mux.Unlock()
@@ -81,17 +68,17 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 	if lm.l, ok = lm.mux.GetListener(n); !ok {
 
 		// We don't have a listener for this netloc yet, so create it.
-		ql, err := listenQUIC(n, tc, qc)
+		ql, err := quic.ListenAddr(n.Netloc(), tc, qc)
 		if err != nil {
 			return err
 		}
 
 		// Init refcnt to track the Listener's usage and clean up when we're done
 		lm.l = newRefCntListener(n, ql, lm.mux)
-
-		lm.mux.SetListener(n, lm.l)
+		defer lm.mux.AddListener(n, lm.l) // don't add until it's incremented
 	}
 
+	lm.l.Incr()
 	return nil
 }
 
@@ -107,6 +94,12 @@ func (lm listenMux) Accept(path string) (conn net.Conn, err error) {
 	// streams, and route them to the appropriate endpoint.
 	go ctx.FTick(lm.l, func() {
 		if sess, err := lm.l.Accept(); err == nil {
+			lm.mux.Lock()
+			defer lm.mux.Unlock()
+
+			sess := newRefCntSession(sess, lm.mux)
+			lm.mux.AddSession(sess.RemoteAddr(), sess.Incr())
+
 			go lm.mux.Serve(sess)
 		}
 	})
@@ -120,7 +113,7 @@ func (lm listenMux) Close(path string) error {
 }
 
 type listener struct {
-	*url.URL
+	netloc
 
 	muxListener
 
@@ -130,7 +123,7 @@ type listener struct {
 
 func (l *listener) Listen() error {
 	tc, qc := getQUICCfg(l.opt)
-	return errors.Wrap(l.LoadListener(l.URL, tc, qc), "listen quic")
+	return errors.Wrap(l.LoadListener(l.netloc, tc, qc), "listen quic")
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
