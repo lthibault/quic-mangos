@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+type lstnFactory func(string, *tls.Config, *quic.Config) (quic.Listener, error)
+
 type listenDeleter interface {
 	DelListener(netlocator)
 }
@@ -51,12 +53,13 @@ func (r *refcntListener) DecrAndClose() (err error) {
 
 // listenMux implements muxListener
 type listenMux struct {
-	mux *multiplexer
-	l   *refcntListener
+	mux     *multiplexer
+	factory lstnFactory
+	l       *refcntListener
 }
 
-func newListenMux(m *multiplexer) *listenMux {
-	return &listenMux{mux: m}
+func newListenMux(m *multiplexer, fn lstnFactory) *listenMux {
+	return &listenMux{mux: m, factory: fn}
 }
 
 func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config) error {
@@ -67,7 +70,7 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 	if lm.l, ok = lm.mux.GetListener(n); !ok {
 
 		// We don't have a listener for this netloc yet, so create it.
-		ql, err := quic.ListenAddr(n.Netloc(), tc, qc)
+		ql, err := lm.factory(n.Netloc(), tc, qc)
 		if err != nil {
 			return err
 		}
