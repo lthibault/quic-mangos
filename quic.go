@@ -1,14 +1,11 @@
 package quic
 
 import (
-	"net"
 	"net/url"
 	"path/filepath"
 	"sync"
 
-	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
-	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
 
@@ -47,14 +44,7 @@ func (o *options) set(name string, val interface{}) error {
 	return mangos.ErrBadOption
 }
 
-type transport struct {
-	sync.Mutex
-	opt *options
-
-	routes    *router
-	listeners map[string]*refcntListener
-	sessions  map[string]*refcntSession
-}
+type transport struct{ opt *options }
 
 func (*transport) Scheme() string { return "quic" }
 
@@ -70,7 +60,7 @@ func (t *transport) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDiale
 		netloc:  netloc{u},
 		opt:     t.opt,
 		sock:    sock,
-		dialMux: newDialMux(sock, t),
+		dialMux: newDialMux(sock, mux{}),
 	}, nil
 }
 
@@ -86,84 +76,11 @@ func (t *transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeLis
 		netloc:    netloc{u},
 		opt:       t.opt,
 		sock:      sock,
-		listenMux: newListenMux(t),
+		listenMux: newListenMux(mux{}),
 	}, nil
-}
-
-// Implement multiplexer
-func (t *transport) GetListener(n netlocator) (l *refcntListener, ok bool) {
-	l, ok = t.listeners[n.Netloc()]
-	return
-}
-
-func (t *transport) AddListener(n netlocator, l *refcntListener) {
-	t.listeners[n.Netloc()] = l
-}
-
-func (t *transport) DelListener(n netlocator) {
-	t.Lock()
-	delete(t.listeners, n.Netloc())
-	t.Unlock()
-}
-
-func (t *transport) GetSession(n netlocator) (s *refcntSession, ok bool) {
-	s, ok = t.sessions[n.Netloc()]
-	return
-}
-
-func (t *transport) AddSession(a net.Addr, sess *refcntSession) {
-	t.sessions[a.String()] = sess
-}
-
-func (t *transport) DelSession(a net.Addr) {
-	t.Lock()
-	delete(t.sessions, a.String())
-	t.Unlock()
-}
-
-func (t *transport) RegisterPath(path string, ch chan<- net.Conn) (err error) {
-	if !t.routes.Add(path, ch) {
-		err = errors.Errorf("route already registered for %s", path)
-	}
-	return
-}
-
-func (t *transport) UnregisterPath(path string) { t.routes.Del(path) }
-
-func (t *transport) Serve(sess quic.Session) {
-	for _ = range ctx.Tick(sess.Context()) {
-		stream, err := sess.AcceptStream()
-		if err != nil {
-			continue
-		}
-
-		go t.routeStream(sess, stream)
-	}
-}
-
-func (t *transport) routeStream(sess quic.Session, stream quic.Stream) {
-	var n listenNegotiator = newNegotiator(stream)
-
-	path, err := n.ReadHeaders()
-	if err != nil {
-		n.Abort(400, err.Error())
-		return
-	} else if ch, ok := t.routes.Get(path); !ok {
-		n.Abort(404, path)
-		return
-	} else if err = n.Accept(); err != nil {
-		_ = stream.Close()
-	} else {
-		ch <- &conn{Session: sess, Stream: stream}
-	}
 }
 
 // NewTransport allocates a new quic:// transport.
 func NewTransport() mangos.Transport {
-	return &transport{opt: &options{
-		opt: make(map[string]interface{})},
-		routes:    newRouter(),
-		listeners: make(map[string]*refcntListener),
-		sessions:  make(map[string]*refcntSession),
-	}
+	return &transport{opt: &options{opt: make(map[string]interface{})}}
 }

@@ -55,8 +55,8 @@ func newListenMux(m multiplexer) *listenMux {
 }
 
 func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config) error {
-	lm.mux.Lock()
-	defer lm.mux.Unlock()
+	lock.Lock()
+	defer lock.Unlock()
 
 	var ok bool
 	if lm.l, ok = lm.mux.GetListener(n); !ok {
@@ -69,7 +69,7 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 
 		// Init refcnt to track the Listener's usage and clean up when we're done
 		lm.l = newRefCntListener(n, ql, lm.mux)
-		defer lm.mux.AddListener(n, lm.l) // don't add until it's incremented
+		lm.mux.AddListener(n, lm.l)
 	}
 
 	lm.l.Incr()
@@ -88,8 +88,8 @@ func (lm listenMux) Accept(path string) (conn net.Conn, err error) {
 	// streams, and route them to the appropriate endpoint.
 	go ctx.FTick(lm.l, func() {
 		if sess, err := lm.l.Accept(); err == nil {
-			lm.mux.Lock()
-			defer lm.mux.Unlock()
+			lock.Lock()
+			defer lock.Unlock()
 
 			sess := newRefCntSession(sess, lm.mux)
 			lm.mux.AddSession(sess.RemoteAddr(), sess.Incr())

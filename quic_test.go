@@ -1,8 +1,6 @@
 package quic
 
 import (
-	"net"
-	"net/url"
 	"testing"
 
 	"github.com/go-mangos/mangos"
@@ -19,12 +17,6 @@ func TestNewTransport(t *testing.T) {
 	trans := NewTransport().(*transport)
 	if trans.opt == nil {
 		t.Error("opt is nil")
-	} else if trans.routes == nil {
-		t.Error("router is nil")
-	} else if trans.listeners == nil {
-		t.Error("listeners is nil")
-	} else if trans.sessions == nil {
-		t.Error("sessions is nil")
 	} else if trans.Scheme() != "quic" {
 		t.Errorf("expected sheme to be `quic `, got %s", trans.Scheme())
 	}
@@ -95,112 +87,6 @@ func TestNewListener(t *testing.T) {
 		if _, err := trans.NewListener(addr, sock); err == nil {
 			t.Error("should have failed due to invalid URL")
 		}
-	})
-}
-
-func TestMultiplexer(t *testing.T) {
-	trans := NewTransport().(*transport)
-	u, _ := url.ParseRequestURI("quic://127.0.0.1:9001/hello")
-	n := &netloc{URL: u}
-
-	t.Run("TestListenerOps", func(t *testing.T) {
-
-		rfcl := new(refcntListener)
-
-		t.Run("AddListener", func(t *testing.T) {
-			trans.AddListener(n, rfcl)
-
-			if l, ok := trans.listeners[n.Netloc()]; !ok {
-				t.Error("listener was not added to map")
-			} else if l != rfcl {
-				t.Error("listener pointer mismatch")
-			}
-		})
-
-		t.Run("GetListener", func(t *testing.T) {
-			if l, ok := trans.GetListener(n); !ok {
-				t.Error("listener was not found in map")
-			} else if l != rfcl {
-				t.Error("listener pointer mismatch")
-			}
-		})
-
-		t.Run("DelListener", func(t *testing.T) {
-			trans.DelListener(n)
-			if _, ok := trans.listeners[n.Netloc()]; ok {
-				t.Error("listener not removed")
-			}
-		})
-	})
-
-	t.Run("TestSessionOps", func(t *testing.T) {
-
-		rfcs := new(refcntSession)
-
-		t.Run("AddSession", func(t *testing.T) {
-			trans.AddSession(mockAddrNetloc(n.String()), rfcs)
-
-			if s, ok := trans.sessions[n.String()]; !ok {
-				t.Error("session was not added to map")
-			} else if s != rfcs {
-				t.Error("session pointer mismatch")
-			}
-		})
-
-		t.Run("GetSession", func(t *testing.T) {
-			if s, ok := trans.GetSession(mockAddrNetloc(n.String())); !ok {
-				t.Error("session was not found in map")
-			} else if s != rfcs {
-				t.Error("session pointer mismatch")
-			}
-		})
-
-		t.Run("DelSession", func(t *testing.T) {
-			trans.DelSession(mockAddrNetloc(n.String()))
-			if _, ok := trans.sessions[n.String()]; ok {
-				t.Error("session not removed")
-			}
-		})
-	})
-
-	t.Run("TestRouterOps", func(t *testing.T) {
-		t.Run("RegisterPath", func(t *testing.T) {
-			ch := make(chan net.Conn)
-
-			t.Run("SlotFree", func(t *testing.T) {
-				if err := trans.RegisterPath(n.Path, ch); err != nil {
-					t.Error(err)
-				}
-			})
-
-			t.Run("SlotOccupied", func(t *testing.T) {
-				if err := trans.RegisterPath(n.Path, ch); err == nil {
-					t.Errorf("expected %s to be occupied, was free", n.Path)
-				}
-			})
-		})
-
-		t.Run("UnregisterPath", func(t *testing.T) {
-			t.Run("SlotOccupied", func(t *testing.T) {
-				trans.UnregisterPath(n.Path)
-				if _, ok := trans.routes.Get(n.Path); ok {
-					t.Error("value not removed from radix tree")
-				}
-			})
-
-			t.Run("SlotFree", func(t *testing.T) {
-				trans.UnregisterPath(n.Path)
-				// make sure nothing weird happens (e.g. panics)
-			})
-		})
-
-		// t.Run("Serve", func(t *testing.T) {
-		// this is too hard to test for now ... :/
-		// })
-
-		// t.Run("routeStream", func(t *testing.T) {
-		// this is too hard to test for now ... :/
-		// })
 	})
 }
 

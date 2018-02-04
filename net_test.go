@@ -123,3 +123,109 @@ func TestRouter(t *testing.T) {
 func TestRefcntSession(t *testing.T) {
 
 }
+
+func TestMultiplexer(t *testing.T) {
+	mx := mux{}
+	u, _ := url.ParseRequestURI("quic://127.0.0.1:9001/hello")
+	n := &netloc{URL: u}
+
+	t.Run("TestListenerOps", func(t *testing.T) {
+
+		rfcl := new(refcntListener)
+
+		t.Run("AddListener", func(t *testing.T) {
+			mx.AddListener(n, rfcl)
+
+			if l, ok := listeners[n.Netloc()]; !ok {
+				t.Error("listener was not added to map")
+			} else if l != rfcl {
+				t.Error("listener pointer mismatch")
+			}
+		})
+
+		t.Run("GetListener", func(t *testing.T) {
+			if l, ok := mx.GetListener(n); !ok {
+				t.Error("listener was not found in map")
+			} else if l != rfcl {
+				t.Error("listener pointer mismatch")
+			}
+		})
+
+		t.Run("DelListener", func(t *testing.T) {
+			mx.DelListener(n)
+			if _, ok := listeners[n.Netloc()]; ok {
+				t.Error("listener not removed")
+			}
+		})
+	})
+
+	t.Run("TestSessionOps", func(t *testing.T) {
+
+		rfcs := new(refcntSession)
+
+		t.Run("AddSession", func(t *testing.T) {
+			mx.AddSession(mockAddrNetloc(n.String()), rfcs)
+
+			if s, ok := sessions[n.String()]; !ok {
+				t.Error("session was not added to map")
+			} else if s != rfcs {
+				t.Error("session pointer mismatch")
+			}
+		})
+
+		t.Run("GetSession", func(t *testing.T) {
+			if s, ok := mx.GetSession(mockAddrNetloc(n.String())); !ok {
+				t.Error("session was not found in map")
+			} else if s != rfcs {
+				t.Error("session pointer mismatch")
+			}
+		})
+
+		t.Run("DelSession", func(t *testing.T) {
+			mx.DelSession(mockAddrNetloc(n.String()))
+			if _, ok := sessions[n.String()]; ok {
+				t.Error("session not removed")
+			}
+		})
+	})
+
+	t.Run("TestRouterOps", func(t *testing.T) {
+		t.Run("RegisterPath", func(t *testing.T) {
+			ch := make(chan net.Conn)
+
+			t.Run("SlotFree", func(t *testing.T) {
+				if err := mx.RegisterPath(n.Path, ch); err != nil {
+					t.Error(err)
+				}
+			})
+
+			t.Run("SlotOccupied", func(t *testing.T) {
+				if err := mx.RegisterPath(n.Path, ch); err == nil {
+					t.Errorf("expected %s to be occupied, was free", n.Path)
+				}
+			})
+		})
+
+		t.Run("UnregisterPath", func(t *testing.T) {
+			t.Run("SlotOccupied", func(t *testing.T) {
+				mx.UnregisterPath(n.Path)
+				if _, ok := routes.Get(n.Path); ok {
+					t.Error("value not removed from radix tree")
+				}
+			})
+
+			t.Run("SlotFree", func(t *testing.T) {
+				// make sure nothing weird happens (e.g. panics)
+				mx.UnregisterPath(n.Path)
+			})
+		})
+
+		// t.Run("Serve", func(t *testing.T) {
+		// this is too hard to test for now ... :/
+		// })
+
+		// t.Run("routeStream", func(t *testing.T) {
+		// this is too hard to test for now ... :/
+		// })
+	})
+}
