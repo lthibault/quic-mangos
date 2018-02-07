@@ -3,7 +3,6 @@ package quic
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +22,10 @@ type netlocator interface {
 	Netloc() string
 }
 
+type netloc struct{ *url.URL }
+
+func (n netloc) Netloc() string { return n.Host }
+
 type sessionDropper interface {
 	DelSession(net.Addr)
 }
@@ -33,30 +36,6 @@ type dialMuxer interface {
 	AddSession(net.Addr, *refcntSession)
 	sessionDropper
 }
-
-// Session is a subset of quic.Session whose exported methods do not use or
-// return unexported types.
-type Session interface {
-	AcceptStream() (quic.Stream, error)
-	OpenStream() (quic.Stream, error)
-	OpenStreamSync() (quic.Stream, error)
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
-	Close(error) error
-	Context() context.Context
-}
-
-// Listener is equivalent to quic.Listener, except that it uses the local
-// Session interface
-type Listener interface {
-	Accept() (Session, error)
-	Addr() net.Addr
-	Close() error
-}
-
-type netloc struct{ *url.URL }
-
-func (n netloc) Netloc() string { return n.Host }
 
 type multiplexer struct {
 	sync.Mutex
@@ -112,7 +91,7 @@ func (m *multiplexer) RegisterPath(path string, ch chan<- net.Conn) (err error) 
 
 func (m *multiplexer) UnregisterPath(path string) { m.routes.Del(path) }
 
-func (m *multiplexer) Serve(sess Session) {
+func (m *multiplexer) Serve(sess quic.Session) {
 	for _ = range ctx.Tick(sess.Context()) {
 		stream, err := sess.AcceptStream()
 		if err != nil {
@@ -123,7 +102,7 @@ func (m *multiplexer) Serve(sess Session) {
 	}
 }
 
-func (m *multiplexer) routeStream(sess Session, stream quic.Stream) {
+func (m *multiplexer) routeStream(sess quic.Session, stream quic.Stream) {
 	var n listenNegotiator = newNegotiator(stream)
 
 	path, err := n.ReadHeaders()
@@ -242,10 +221,10 @@ func (r *router) Del(path string) {
 type refcntSession struct {
 	gc     func()
 	refcnt int32
-	Session
+	quic.Session
 }
 
-func newRefCntSession(sess Session, d sessionDropper) *refcntSession {
+func newRefCntSession(sess quic.Session, d sessionDropper) *refcntSession {
 	return &refcntSession{
 		Session: sess,
 		gc:      func() { d.DelSession(sess.RemoteAddr()) },
