@@ -61,3 +61,5 @@ func (m *mockSess) Close(error) error {
 	m.closed = true
 	return nil
 }
+
+func (*mockSess) ConnectionState() quic.ConnectionState { return quic.ConnectionState{} }
