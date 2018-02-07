@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type lstnFactory func(string, *tls.Config, *quic.Config) (quic.Listener, error)
+type lstnFactory func(string, *tls.Config, *quic.Config) (Listener, error)
 
 type listenDeleter interface {
 	DelListener(netlocator)
@@ -21,10 +21,10 @@ type refcntListener struct {
 	ctx.Doner
 	gc     func()
 	refcnt int32
-	quic.Listener
+	Listener
 }
 
-func newRefCntListener(n netlocator, l quic.Listener, d listenDeleter) *refcntListener {
+func newRefCntListener(n netlocator, l Listener, d listenDeleter) *refcntListener {
 	cq := make(chan struct{})
 	return &refcntListener{
 		Listener: l,

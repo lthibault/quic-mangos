@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/go-mangos/mangos"
-	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +48,7 @@ func (t transport) NewListener(addr string, sock mangos.Socket) (mangos.PipeList
 		netloc:    netloc{u},
 		sock:      sock,
 		opt:       newOpt(),
-		listenMux: newListenMux(mux, quic.ListenAddr),
+		listenMux: newListenMux(mux, listenerFactory),
 	}, nil
 }
 

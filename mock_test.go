@@ -8,10 +8,10 @@ import (
 )
 
 var ( // interface constraints
-	_ net.Addr      = mockAddrNetloc("")
-	_ netlocator    = mockAddrNetloc("")
-	_ quic.Listener = &mockLstn{}
-	_ quic.Session  = &mockSess{}
+	_ net.Addr   = mockAddrNetloc("")
+	_ netlocator = mockAddrNetloc("")
+	_ Listener   = &mockLstn{}
+	_ Session    = &mockSess{}
 )
 
 type mockAddrNetloc string
@@ -25,15 +25,15 @@ type mockLstn struct {
 	sessFactory func() *mockSess
 }
 
-func (m mockLstn) Accept() (quic.Session, error) {
+func (m mockLstn) Accept() (Session, error) {
 	if m.sessFactory == nil {
 		return &mockSess{}, nil
 	}
 	return m.sessFactory(), nil
 }
 
-func (mockLstn) Addr() net.Addr                 { return mockAddrNetloc("") }
-func (mockLstn) Listen() (quic.Listener, error) { return nil, nil }
+func (mockLstn) Addr() net.Addr            { return mockAddrNetloc("") }
+func (mockLstn) Listen() (Listener, error) { return nil, nil }
 func (m *mockLstn) Close() error {
 	m.closed = true
 	return nil

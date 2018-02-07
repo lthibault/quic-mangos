@@ -82,8 +82,20 @@ func getQUICCfg(opt *options) (tc *tls.Config, qc *quic.Config) {
 	return
 }
 
+type listenerGuard struct{ quic.Listener }
+
+func (lg listenerGuard) Accept() (s Session, err error) {
+	s, err = lg.Listener.Accept()
+	return
+}
+
+func listenerFactory(addr string, tc *tls.Config, qc *quic.Config) (Listener, error) {
+	l, err := quic.ListenAddr(addr, tc, qc)
+	return listenerGuard{Listener: l}, err
+}
+
 type conn struct {
-	quic.Session
+	Session
 	quic.Stream
 }
 

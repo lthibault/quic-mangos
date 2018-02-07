@@ -59,7 +59,7 @@ func TestListenMux(t *testing.T) {
 
 	t.Run("LoadListener", func(t *testing.T) {
 		mx := newMux()
-		lm := newListenMux(mx, func(string, *tls.Config, *quic.Config) (quic.Listener, error) {
+		lm := newListenMux(mx, func(string, *tls.Config, *quic.Config) (Listener, error) {
 			return &mockLstn{}, nil
 		})
 
@@ -91,7 +91,7 @@ func TestListenMux(t *testing.T) {
 		})
 
 		t.Run("SubsequentLoad", func(t *testing.T) {
-			lm.factory = func(string, *tls.Config, *quic.Config) (quic.Listener, error) {
+			lm.factory = func(string, *tls.Config, *quic.Config) (Listener, error) {
 				t.Error("listener was already loaded; should not have been reloaded")
 				return nil, nil
 			}
@@ -109,7 +109,7 @@ func TestListenMux(t *testing.T) {
 	// 	defer cancel()
 
 	// 	mx := newMux()
-	// 	lm := newListenMux(mx, func(string, *tls.Config, *quic.Config) (quic.Listener, error) {
+	// 	lm := newListenMux(mx, func(string, *tls.Config, *quic.Config) (Listener, error) {
 	// 		return &mockLstn{sessFactory: func() *mockSess {
 	// 			return &mockSess{contextFactory: func() context.Context {
 	// 				return c
