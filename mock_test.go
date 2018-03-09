@@ -53,10 +53,13 @@ func (m mockSess) Context() context.Context {
 	return m.contextFactory()
 }
 
-func (mockSess) LocalAddr() net.Addr                  { return mockAddrNetloc("") }
-func (mockSess) OpenStream() (quic.Stream, error)     { return nil, nil }
-func (mockSess) OpenStreamSync() (quic.Stream, error) { return nil, nil }
-func (mockSess) RemoteAddr() net.Addr                 { return mockAddrNetloc("") }
+func (mockSess) LocalAddr() net.Addr                          { return mockAddrNetloc("") }
+func (mockSess) OpenStream() (quic.Stream, error)             { return nil, nil }
+func (mockSess) OpenStreamSync() (quic.Stream, error)         { return nil, nil }
+func (mockSess) RemoteAddr() net.Addr                         { return mockAddrNetloc("") }
+func (mockSess) AcceptUniStream() (quic.ReceiveStream, error) { return nil, nil }
+func (mockSess) OpenUniStream() (quic.SendStream, error)      { return nil, nil }
+func (mockSess) OpenUniStreamSync() (quic.SendStream, error)  { return nil, nil }
 func (m *mockSess) Close(error) error {
 	m.closed = true
 	return nil
