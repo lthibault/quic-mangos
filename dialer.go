@@ -73,7 +73,7 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "dial path")
 	}
 
-	return NewQUICPipe(stream, d.sock)
+	return newQUICPipe(asPath(d.Path), stream, d.sock)
 }
 
 func (d dialer) GetOption(name string) (interface{}, error) { return d.opt.get(name) }

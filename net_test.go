@@ -30,7 +30,7 @@ func (b *bufCloser) Close() (err error) {
 func TestRouter(t *testing.T) {
 	r := newRouter()
 	ch := make(chan quic.Stream)
-	const path = "/some/path"
+	path := asPath("/some/path")
 
 	t.Run("Add", func(t *testing.T) {
 		if !r.Add(path, ch) {
@@ -174,13 +174,13 @@ func TestMultiplexer(t *testing.T) {
 			ch := make(chan quic.Stream)
 
 			t.Run("SlotFree", func(t *testing.T) {
-				if err := mx.RegisterPath(n.Path, ch); err != nil {
+				if err := mx.RegisterPath(asPath(n.Path), ch); err != nil {
 					t.Error(err)
 				}
 			})
 
 			t.Run("SlotOccupied", func(t *testing.T) {
-				if err := mx.RegisterPath(n.Path, ch); err == nil {
+				if err := mx.RegisterPath(asPath(n.Path), ch); err == nil {
 					t.Errorf("expected %s to be occupied, was free", n.Path)
 				}
 			})
@@ -188,15 +188,15 @@ func TestMultiplexer(t *testing.T) {
 
 		t.Run("UnregisterPath", func(t *testing.T) {
 			t.Run("SlotOccupied", func(t *testing.T) {
-				mx.UnregisterPath(n.Path)
-				if _, ok := mx.routes.Get(n.Path); ok {
+				mx.UnregisterPath(asPath(n.Path))
+				if _, ok := mx.routes.Get(asPath(n.Path)); ok {
 					t.Error("value not removed from radix tree")
 				}
 			})
 
 			t.Run("SlotFree", func(t *testing.T) {
 				// make sure nothing weird happens (e.g. panics)
-				mx.UnregisterPath(n.Path)
+				mx.UnregisterPath(asPath(n.Path))
 			})
 		})
 

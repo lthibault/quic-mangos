@@ -17,21 +17,37 @@ import (
 
 var mux = newMux()
 
-type path struct {
-	s string
-	i uint32
+type hasher interface {
+	Hash() uint64
 }
 
-func asPath(s string) *path { return &path{s: s} }
+type path interface {
+	hasher
+	String() string
+}
 
-func (p *path) Hash() (i uint32) {
+type pathString struct {
+	s string
+	i uint64
+}
+
+func asPath(s string) *pathString { return &pathString{s: s} }
+
+func (p pathString) String() string { return p.s }
+
+func (p *pathString) Hash() (i uint64) {
 	if p.i == 0 {
 		hasher := md5.New()
 		hasher.Write([]byte(p.s))
-		p.i = binary.BigEndian.Uint32(hasher.Sum(nil)[:8])
+		p.i = binary.BigEndian.Uint64(hasher.Sum(nil)[:8])
 	}
 	return p.i
 }
+
+type pathHash uint64
+
+func (p pathHash) String() string { panic("pathHash cannot determine original path") }
+func (p pathHash) Hash() uint64   { return uint64(p) }
 
 type netlocator interface {
 	Netloc() string
@@ -40,6 +56,21 @@ type netlocator interface {
 type netloc struct{ *url.URL }
 
 func (n netloc) Netloc() string { return n.Host }
+
+// connHeader is exchanged during the initial handshake.
+type connHeader struct {
+	Zero    byte // must be zero
+	S       byte // 'S'
+	P       byte // 'P'
+	Version byte // only zero at present
+	Proto   uint16
+	Rsvd    uint16 // always zero at present
+	Path    uint64 // 64-bit hash of the path
+}
+
+func (h *connHeader) Load(r io.Reader) error { return binary.Read(r, binary.BigEndian, h) }
+func (h *connHeader) Dump(w io.Writer) error { return binary.Write(w, binary.BigEndian, h) }
+func (h *connHeader) Hash() uint64           { return h.Path }
 
 type sessionDropper interface {
 	DelSession(net.Addr)
@@ -97,14 +128,14 @@ func (m *multiplexer) DelSession(a net.Addr) {
 	m.Unlock()
 }
 
-func (m *multiplexer) RegisterPath(p *path, ch chan<- quic.Stream) (err error) {
+func (m *multiplexer) RegisterPath(p path, ch chan<- quic.Stream) (err error) {
 	if !m.routes.Add(p, ch) {
-		err = errors.Errorf("route already registered for %s", p.s)
+		err = errors.Errorf("route already registered for %s", p.String())
 	}
 	return
 }
 
-func (m *multiplexer) UnregisterPath(p *path) { m.routes.Del(p) }
+func (m *multiplexer) UnregisterPath(p path) { m.routes.Del(p) }
 
 func (m *multiplexer) Serve(sess quic.Session) {
 	for _ = range ctx.Tick(sess.Context()) {
@@ -117,33 +148,28 @@ func (m *multiplexer) Serve(sess quic.Session) {
 	}
 }
 
-func (m *multiplexer) routeStream(stream quic.Stream) {
-	panic("NOT IMPLEMENTED")
+func (m *multiplexer) routeStream(s quic.Stream) {
 
-	// var n listenNegotiator = newNegotiator(stream)
-
-	// path, err := n.ReadHeaders()
-	// if err != nil {
-	// 	n.Abort(400, err.Error())
-	// 	return
-	// } else if ch, ok := m.routes.Get(path); !ok {
-	// 	n.Abort(404, path)
-	// 	return
-	// } else if err = n.Accept(); err != nil {
-	// 	_ = stream.Close()
-	// } else {
-	// 	ch <- stream
-	// }
+	var h = new(connHeader)
+	if err := h.Load(s); err != nil {
+		// TODO:  find some way to report "invalid header" errors back to the dialer
+		_ = s.Close()
+	} else if ch, ok := m.routes.Get(pathHash(h.Hash())); !ok {
+		// TODO:  find some way to report "refused - nobody there" errors back to the dialer
+		_ = s.Close()
+	} else {
+		ch <- s
+	}
 }
 
 type router struct {
 	sync.RWMutex
-	routes map[uint32]chan<- quic.Stream
+	routes map[uint64]chan<- quic.Stream
 }
 
-func newRouter() *router { return &router{routes: make(map[uint32]chan<- quic.Stream)} }
+func newRouter() *router { return &router{routes: make(map[uint64]chan<- quic.Stream)} }
 
-func (r *router) Get(p *path) (ch chan<- quic.Stream, ok bool) {
+func (r *router) Get(p path) (ch chan<- quic.Stream, ok bool) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -152,7 +178,7 @@ func (r *router) Get(p *path) (ch chan<- quic.Stream, ok bool) {
 	return
 }
 
-func (r *router) Add(p *path, ch chan<- quic.Stream) (ok bool) {
+func (r *router) Add(p path, ch chan<- quic.Stream) (ok bool) {
 	r.Lock()
 	// TODO: hash the path
 	if _, ok = r.routes[p.Hash()]; !ok {
@@ -163,7 +189,7 @@ func (r *router) Add(p *path, ch chan<- quic.Stream) (ok bool) {
 	return
 }
 
-func (r *router) Del(p *path) {
+func (r *router) Del(p path) {
 	r.Lock()
 	// TODO: hash the path
 	delete(r.routes, p.Hash())
@@ -203,7 +229,41 @@ type quicPipe struct {
 	maxrx int64 // NOTE: (probably) set via socket value in NewQUICConn
 	sock  mangos.Socket
 	proto mangos.Protocol
-	props map[string]interface{}
+}
+
+func (p *quicPipe) handshake(h hasher) (err error) {
+
+	if v, e := p.sock.GetOption(mangos.OptionMaxRecvSize); e == nil {
+		// socket guarantees this is an integer
+		p.maxrx = int64(v.(int))
+	}
+
+	hdr := &connHeader{
+		S: 'S', P: 'P',
+		Proto: p.proto.Number(),
+		Path:  h.Hash(),
+	}
+
+	if err = hdr.Dump(p.s); err != nil {
+		return err
+	}
+
+	if err = hdr.Load(p.s); err != nil {
+		_ = p.s.Close()
+		return errors.Wrap(err, "maybe wrong path?")
+	}
+
+	if hdr.Zero != 0 || hdr.S != 'S' || hdr.P != 'P' || hdr.Rsvd != 0 {
+		_ = p.s.Close()
+		return mangos.ErrBadVersion
+	}
+
+	if hdr.Proto != p.proto.PeerNumber() {
+		_ = p.s.Close()
+		return mangos.ErrBadProto
+	}
+
+	return
 }
 
 func (p quicPipe) Send(msg *mangos.Message) error {
@@ -265,8 +325,15 @@ func (p quicPipe) IsOpen() bool {
 }
 
 func (p quicPipe) GetProp(name string) (interface{}, error) {
-	if v, ok := p.props[name]; ok {
-		return v, nil
-	}
 	return nil, mangos.ErrBadProperty
+}
+
+func newQUICPipe(p path, s quic.Stream, sock mangos.Socket) (*quicPipe, error) {
+	pipe := &quicPipe{s: s, proto: sock.GetProtocol(), sock: sock}
+
+	if err := pipe.handshake(p); err != nil {
+		return nil, err
+	}
+
+	return pipe, nil
 }

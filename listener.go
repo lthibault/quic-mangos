@@ -84,9 +84,9 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 }
 
 func (lm listenMux) Accept(path string) (stream quic.Stream, err error) {
-	chStrm := make(chan quic.Stream)
+	chConn := make(chan quic.Stream)
 
-	if err = lm.mux.RegisterPath(asPath(path), chStrm); err != nil {
+	if err = lm.mux.RegisterPath(asPath(path), chConn); err != nil {
 		err = errors.Wrapf(err, "register path %s", path)
 		return
 	}
@@ -105,7 +105,7 @@ func (lm listenMux) Accept(path string) (stream quic.Stream, err error) {
 		}
 	})
 
-	return <-chStrm, nil
+	return <-chConn, nil
 }
 
 func (lm listenMux) Close(path string) error {
@@ -131,7 +131,7 @@ func (l listener) Accept() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "mux accept")
 	}
 
-	return NewQUICPipe(s, l.sock)
+	return newQUICPipe(asPath(l.Path), s, l.sock)
 }
 
 func (l listener) Close() error {
