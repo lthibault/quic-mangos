@@ -3,12 +3,14 @@ package quic
 import (
 	"crypto/md5"
 	"encoding/binary"
+	"io"
 	"net"
 	"net/url"
 	"sync"
 	"sync/atomic"
 
 	"github.com/SentimensRG/ctx"
+	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
@@ -194,4 +196,77 @@ func (r *refcntSession) DecrAndClose() (err error) {
 		panic(errors.New("already closed"))
 	}
 	return
+}
+
+type quicPipe struct {
+	s     quic.Stream
+	maxrx int64 // NOTE: (probably) set via socket value in NewQUICConn
+	sock  mangos.Socket
+	proto mangos.Protocol
+	props map[string]interface{}
+}
+
+func (p quicPipe) Send(msg *mangos.Message) error {
+	l := uint64(len(msg.Header) + len(msg.Body))
+
+	if msg.Expired() {
+		msg.Free()
+		return nil
+	}
+
+	// send length header
+	if err := binary.Write(p.s, binary.BigEndian, l); err != nil {
+		return err
+	}
+	if _, err := p.s.Write(msg.Header); err != nil {
+		return err
+	}
+	// hope this works
+	if _, err := p.s.Write(msg.Body); err != nil {
+		return err
+	}
+	msg.Free()
+	return nil
+}
+
+func (p quicPipe) Recv() (msg *mangos.Message, err error) {
+	var sz int64
+	if err = binary.Read(p.s, binary.BigEndian, &sz); err != nil {
+		return nil, err
+	}
+
+	// Limit messages to the maximum receive value, if not
+	// unlimited.  This avoids a potential denaial of service.
+	if sz < 0 || (p.maxrx > 0 && sz > p.maxrx) {
+		return nil, mangos.ErrTooLong
+	}
+	msg = mangos.NewMessage(int(sz))
+	msg.Body = msg.Body[0:sz]
+	if _, err = io.ReadFull(p.s, msg.Body); err != nil {
+		msg.Free()
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (p quicPipe) Close() error { return p.s.Close() }
+
+func (p quicPipe) LocalProtocol() uint16 { return p.proto.Number() }
+
+func (p quicPipe) RemoteProtocol() uint16 { return p.proto.PeerNumber() }
+
+func (p quicPipe) IsOpen() bool {
+	select {
+	case <-p.s.Context().Done():
+		return false
+	default:
+		return true
+	}
+}
+
+func (p quicPipe) GetProp(name string) (interface{}, error) {
+	if v, ok := p.props[name]; ok {
+		return v, nil
+	}
+	return nil, mangos.ErrBadProperty
 }
