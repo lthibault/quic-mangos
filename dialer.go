@@ -89,10 +89,5 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 	return mangos.NewConnPipe(conn, d.sock)
 }
 
-func (d dialer) GetOption(name string) (v interface{}, err error) {
-	return // TODO
-}
-
-func (d dialer) SetOption(name string, v interface{}) (err error) {
-	return // TODO
-}
+func (d dialer) GetOption(name string) (interface{}, error) { return d.opt.get(name) }
+func (d dialer) SetOption(name string, v interface{}) error { return d.opt.set(name, v) }

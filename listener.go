@@ -139,12 +139,7 @@ func (l listener) Close() error {
 	return l.listenMux.Close(l.Path)
 }
 
-func (l listener) GetOption(name string) (v interface{}, err error) {
-	return // TODO
-}
-
-func (l listener) SetOption(name string, v interface{}) (err error) {
-	return // TODO
-}
+func (l listener) GetOption(name string) (v interface{}, err error) { return l.opt.get(name) }
+func (l listener) SetOption(name string, v interface{}) (err error) { return l.opt.set(name, v) }
 
 func (l listener) Address() string { return l.URL.String() }
