@@ -2,9 +2,10 @@ package quic
 
 import (
 	"bytes"
-	"net"
 	"net/url"
 	"testing"
+
+	quic "github.com/lucas-clemente/quic-go"
 )
 
 func TestNetloc(t *testing.T) {
@@ -26,72 +27,9 @@ func (b *bufCloser) Close() (err error) {
 	return
 }
 
-func TestNegotiator(t *testing.T) {
-	const path = "/some/path"
-
-	buf := &bufCloser{Buffer: new(bytes.Buffer)}
-	n := newNegotiator(buf)
-
-	t.Run("PathNegotiation", func(t *testing.T) {
-		defer buf.Reset()
-
-		t.Run("WriteHeaders", func(t *testing.T) {
-			if err := n.WriteHeaders(path); err != nil {
-				t.Error(err)
-			}
-
-			if buf.String() != path+"\n" {
-				t.Errorf("unexpected value in buffer: %v", buf.Bytes())
-			}
-		})
-
-		t.Run("Readheaders", func(t *testing.T) {
-			if p, err := n.ReadHeaders(); err != nil {
-				t.Error(err)
-			} else if p != path {
-				t.Errorf("expected path `%s`, got `%s`", path, p)
-			}
-		})
-	})
-
-	t.Run("Accept/Ack", func(t *testing.T) {
-		defer buf.Reset()
-
-		t.Run("Accept", func(t *testing.T) {
-			if err := n.Accept(); err != nil {
-				t.Error(err)
-			}
-		})
-
-		t.Run("Ack", func(t *testing.T) {
-			if err := n.Ack(); err != nil {
-				t.Error(err)
-			}
-		})
-	})
-
-	t.Run("Abort/Ack", func(t *testing.T) {
-		defer buf.Reset()
-
-		t.Run("Abort", func(t *testing.T) {
-			if err := n.Abort(404, "not found"); err != nil {
-				t.Error(err)
-			} else if buf.String() != "404:not found" {
-				t.Errorf("expected `404:not found`, got `%s`", buf.String())
-			}
-		})
-
-		t.Run("Ack", func(t *testing.T) {
-			if err := n.Ack(); err == nil {
-				t.Error("no error reported for aborted transaction")
-			}
-		})
-	})
-}
-
 func TestRouter(t *testing.T) {
 	r := newRouter()
-	ch := make(chan net.Conn)
+	ch := make(chan quic.Stream)
 	const path = "/some/path"
 
 	t.Run("Add", func(t *testing.T) {
@@ -233,7 +171,7 @@ func TestMultiplexer(t *testing.T) {
 
 	t.Run("TestRouterOps", func(t *testing.T) {
 		t.Run("RegisterPath", func(t *testing.T) {
-			ch := make(chan net.Conn)
+			ch := make(chan quic.Stream)
 
 			t.Run("SlotFree", func(t *testing.T) {
 				if err := mx.RegisterPath(n.Path, ch); err != nil {

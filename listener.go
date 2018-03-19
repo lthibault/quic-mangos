@@ -2,7 +2,6 @@ package quic
 
 import (
 	"crypto/tls"
-	"net"
 	"sync/atomic"
 
 	"github.com/SentimensRG/ctx"
@@ -84,10 +83,10 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 	return nil
 }
 
-func (lm listenMux) Accept(path string) (conn net.Conn, err error) {
-	chConn := make(chan net.Conn)
+func (lm listenMux) Accept(path string) (stream quic.Stream, err error) {
+	chStrm := make(chan quic.Stream)
 
-	if err = lm.mux.RegisterPath(path, chConn); err != nil {
+	if err = lm.mux.RegisterPath(asPath(path), chStrm); err != nil {
 		err = errors.Wrapf(err, "register path %s", path)
 		return
 	}
@@ -106,11 +105,11 @@ func (lm listenMux) Accept(path string) (conn net.Conn, err error) {
 		}
 	})
 
-	return <-chConn, nil
+	return <-chStrm, nil
 }
 
 func (lm listenMux) Close(path string) error {
-	lm.mux.UnregisterPath(path)
+	lm.mux.UnregisterPath(asPath(path))
 	return lm.l.DecrAndClose()
 }
 
@@ -127,12 +126,12 @@ func (l *listener) Listen() error {
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	conn, err := l.listenMux.Accept(l.Path)
+	s, err := l.listenMux.Accept(l.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "mux accept")
 	}
 
-	return mangos.NewConnPipe(conn, l.sock)
+	return NewQUICPipe(s, l.sock)
 }
 
 func (l listener) Close() error {

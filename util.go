@@ -81,10 +81,3 @@ func getQUICCfg(opt *options) (tc *tls.Config, qc *quic.Config) {
 
 	return
 }
-
-type conn struct {
-	quic.Session
-	quic.Stream
-}
-
-func (c conn) Close() error { return c.Stream.Close() }

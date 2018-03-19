@@ -1,22 +1,35 @@
 package quic
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
-	"io"
+	"crypto/md5"
+	"encoding/binary"
 	"net"
 	"net/url"
 	"sync"
 	"sync/atomic"
 
 	"github.com/SentimensRG/ctx"
-	radix "github.com/armon/go-radix"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
 
 var mux = newMux()
+
+type path struct {
+	s string
+	i uint32
+}
+
+func asPath(s string) *path { return &path{s: s} }
+
+func (p *path) Hash() (i uint32) {
+	if p.i == 0 {
+		hasher := md5.New()
+		hasher.Write([]byte(p.s))
+		p.i = binary.BigEndian.Uint32(hasher.Sum(nil)[:8])
+	}
+	return p.i
+}
 
 type netlocator interface {
 	Netloc() string
@@ -82,14 +95,14 @@ func (m *multiplexer) DelSession(a net.Addr) {
 	m.Unlock()
 }
 
-func (m *multiplexer) RegisterPath(path string, ch chan<- net.Conn) (err error) {
-	if !m.routes.Add(path, ch) {
-		err = errors.Errorf("route already registered for %s", path)
+func (m *multiplexer) RegisterPath(p *path, ch chan<- quic.Stream) (err error) {
+	if !m.routes.Add(p, ch) {
+		err = errors.Errorf("route already registered for %s", p.s)
 	}
 	return
 }
 
-func (m *multiplexer) UnregisterPath(path string) { m.routes.Del(path) }
+func (m *multiplexer) UnregisterPath(p *path) { m.routes.Del(p) }
 
 func (m *multiplexer) Serve(sess quic.Session) {
 	for _ = range ctx.Tick(sess.Context()) {
@@ -98,123 +111,60 @@ func (m *multiplexer) Serve(sess quic.Session) {
 			continue
 		}
 
-		go m.routeStream(sess, stream)
+		go m.routeStream(stream)
 	}
 }
 
-func (m *multiplexer) routeStream(sess quic.Session, stream quic.Stream) {
-	var n listenNegotiator = newNegotiator(stream)
+func (m *multiplexer) routeStream(stream quic.Stream) {
+	panic("NOT IMPLEMENTED")
 
-	path, err := n.ReadHeaders()
-	if err != nil {
-		n.Abort(400, err.Error())
-		return
-	} else if ch, ok := m.routes.Get(path); !ok {
-		n.Abort(404, path)
-		return
-	} else if err = n.Accept(); err != nil {
-		_ = stream.Close()
-	} else {
-		ch <- &conn{Session: sess, Stream: stream}
-	}
-}
+	// var n listenNegotiator = newNegotiator(stream)
 
-type (
-	listenNegotiator interface {
-		ReadHeaders() (string, error)
-		Abort(int, string) error
-		Accept() error
-	}
-
-	dialNegotiator interface {
-		WriteHeaders(string) error
-		Ack() error
-	}
-)
-
-type negotiator struct {
-	io.ReadWriteCloser
-}
-
-func newNegotiator(pipe io.ReadWriteCloser) *negotiator {
-	return &negotiator{ReadWriteCloser: pipe}
-}
-
-func (n negotiator) WriteHeaders(path string) (err error) {
-	buf := bytes.NewBufferString(path + "\n")
-	_, err = io.Copy(n, buf)
-	return
-}
-
-func (n negotiator) Ack() (err error) {
-	scanner := bufio.NewScanner(n)
-
-	if !scanner.Scan() {
-		err = io.EOF
-	} else if err = scanner.Err(); err == nil {
-		if data := scanner.Text(); data != "" {
-			err = errors.New(data)
-		}
-	}
-
-	return
-}
-
-func (n negotiator) ReadHeaders() (path string, err error) {
-	scanner := bufio.NewScanner(n)
-
-	if !scanner.Scan() {
-		err = io.EOF
-	} else if err = scanner.Err(); err == nil {
-		path = scanner.Text()
-	}
-
-	return
-}
-
-func (n negotiator) Abort(status int, message string) error {
-	buf := bytes.NewBufferString(fmt.Sprintf("%d:%s", status, message))
-	_, _ = io.Copy(n, buf) // best-effort
-	return n.Close()
-}
-
-func (n negotiator) Accept() (err error) {
-	_, err = n.Write([]byte("\n"))
-	return
+	// path, err := n.ReadHeaders()
+	// if err != nil {
+	// 	n.Abort(400, err.Error())
+	// 	return
+	// } else if ch, ok := m.routes.Get(path); !ok {
+	// 	n.Abort(404, path)
+	// 	return
+	// } else if err = n.Accept(); err != nil {
+	// 	_ = stream.Close()
+	// } else {
+	// 	ch <- stream
+	// }
 }
 
 type router struct {
 	sync.RWMutex
-	routes *radix.Tree
+	routes map[uint32]chan<- quic.Stream
 }
 
-func newRouter() *router { return &router{routes: radix.New()} }
+func newRouter() *router { return &router{routes: make(map[uint32]chan<- quic.Stream)} }
 
-func (r *router) Get(path string) (ch chan<- net.Conn, ok bool) {
+func (r *router) Get(p *path) (ch chan<- quic.Stream, ok bool) {
 	r.RLock()
 	defer r.RUnlock()
 
-	var v interface{}
-	if v, ok = r.routes.Get(path); ok {
-		ch = v.(chan<- net.Conn)
-	}
-
+	// TODO:  hash the path
+	ch, ok = r.routes[p.Hash()]
 	return
 }
 
-func (r *router) Add(path string, ch chan<- net.Conn) (ok bool) {
+func (r *router) Add(p *path, ch chan<- quic.Stream) (ok bool) {
 	r.Lock()
-	if _, ok = r.routes.Get(path); !ok {
-		r.routes.Insert(path, ch)
+	// TODO: hash the path
+	if _, ok = r.routes[p.Hash()]; !ok {
+		r.routes[p.Hash()] = ch
 	}
 	r.Unlock()
 	ok = !ok // turn "value not found" into "value successfully inserted"
 	return
 }
 
-func (r *router) Del(path string) {
+func (r *router) Del(p *path) {
 	r.Lock()
-	r.routes.Delete(path)
+	// TODO: hash the path
+	delete(r.routes, p.Hash())
 	r.Unlock()
 }
 

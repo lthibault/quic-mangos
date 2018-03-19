@@ -2,8 +2,6 @@ package quic
 
 import (
 	"crypto/tls"
-	"fmt"
-	"net"
 
 	"github.com/SentimensRG/ctx"
 	"github.com/go-mangos/mangos"
@@ -43,28 +41,17 @@ func (dm *dialMux) LoadSession(n netlocator, tc *tls.Config, qc *quic.Config) er
 	return nil
 }
 
-func (dm dialMux) Dial(path string) (net.Conn, error) {
-	stream, err := dm.sess.OpenStreamSync()
-	if err != nil {
-		return nil, errors.Wrap(err, "open stream")
+func (dm dialMux) Dial(path string) (s quic.Stream, err error) {
+
+	if s, err := dm.sess.OpenStreamSync(); err != nil {
+		err = errors.Wrap(err, "open stream")
+	} else {
+		// There's no Close method for mangos.PipeDialer, so we need to decr
+		// the ref counter when the stream closes.
+		ctx.Defer(s.Context(), func() { _ = dm.sess.DecrAndClose() })
 	}
 
-	// There's no Close method for mangos.PipeDialer, so we need to decr
-	// the ref counter when the stream closes.
-	ctx.Defer(stream.Context(), func() { _ = dm.sess.DecrAndClose() })
-
-	// this is where we do the path negotiation
-	var n dialNegotiator = newNegotiator(stream)
-
-	if err = n.WriteHeaders(fmt.Sprintf("%s\n", path)); err != nil {
-		_ = stream.Close()
-		return nil, errors.Wrap(err, "write headers")
-	}
-	if err = n.Ack(); err != nil {
-		return nil, errors.Wrap(err, "ack")
-	}
-
-	return &conn{Stream: stream, Session: dm.sess}, nil
+	return
 }
 
 type dialer struct {
@@ -81,12 +68,12 @@ func (d dialer) Dial() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "dial quic")
 	}
 
-	conn, err := d.dialMux.Dial(d.Path)
+	stream, err := d.dialMux.Dial(d.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "dial path")
 	}
 
-	return mangos.NewConnPipe(conn, d.sock)
+	return NewQUICPipe(stream, d.sock)
 }
 
 func (d dialer) GetOption(name string) (interface{}, error) { return d.opt.get(name) }
