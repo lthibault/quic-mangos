@@ -83,12 +83,11 @@ func (lm *listenMux) LoadListener(n netlocator, tc *tls.Config, qc *quic.Config)
 	return nil
 }
 
-func (lm listenMux) Accept(path string) (stream quic.Stream, err error) {
-	chConn := make(chan quic.Stream)
+func (lm listenMux) Accept(path string) (*connRequest, error) {
+	chConn := make(chan *connRequest)
 
-	if err = lm.mux.RegisterPath(asPath(path), chConn); err != nil {
-		err = errors.Wrapf(err, "register path %s", path)
-		return
+	if err := lm.mux.RegisterPath(asPath(path), chConn); err != nil {
+		return nil, errors.Wrapf(err, "register path %s", path)
 	}
 
 	// Start the listen loop, which will produce sessions, accept their
@@ -126,12 +125,12 @@ func (l *listener) Listen() error {
 }
 
 func (l listener) Accept() (mangos.Pipe, error) {
-	s, err := l.listenMux.Accept(l.Path)
+	r, err := l.listenMux.Accept(l.Path)
 	if err != nil {
 		return nil, errors.Wrap(err, "mux accept")
 	}
 
-	return listenPipe(asPath(l.Path), s, l.sock)
+	return listenPipe(asPath(l.Path), r, l.sock)
 }
 
 func (l listener) Close() error {

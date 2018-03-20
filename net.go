@@ -15,6 +15,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	statusOK        = iota
+	statusBadHeader = iota
+	statusBadPath   = iota
+	statusBadProto  = iota
+)
+
 var mux = newMux()
 
 type hasher interface {
@@ -64,9 +71,7 @@ type connHeader struct {
 	Path  uint64 // 64-bit hash of the path
 }
 
-func (h *connHeader) Load(r io.Reader) error { return binary.Read(r, binary.BigEndian, h) }
-func (h *connHeader) Dump(w io.Writer) error { return binary.Write(w, binary.BigEndian, h) }
-func (h *connHeader) Hash() uint64           { return h.Path }
+func (h *connHeader) Hash() uint64 { return h.Path }
 
 type sessionDropper interface {
 	DelSession(net.Addr)
@@ -124,7 +129,7 @@ func (m *multiplexer) DelSession(a net.Addr) {
 	m.Unlock()
 }
 
-func (m *multiplexer) RegisterPath(p path, ch chan<- quic.Stream) (err error) {
+func (m *multiplexer) RegisterPath(p path, ch chan<- *connRequest) (err error) {
 	if !m.routes.Add(p, ch) {
 		err = errors.Errorf("route already registered for %s", p.String())
 	}
@@ -140,11 +145,19 @@ func (m *multiplexer) Serve(sess quic.Session) {
 			continue
 		}
 
-		go m.routeStream(stream)
+		go m.handshake(&streamNegotiator{stream})
 	}
 }
 
-func (m *multiplexer) routeStream(s quic.Stream) {
+func (m *multiplexer) handshake(sn *streamNegotiator) {
+	h, err := sn.Header()
+	if err != nil {
+		sn.Abort(statusBadHeader)
+	} else if ch, ok := m.routes.Get(h); !ok {
+		sn.Abort(statusBadPath)
+	} else {
+		ch <- &connRequest{H: h, Stream: sn.Stream}
+	}
 
 	// var h = new(connHeader)
 	// if err := h.Load(s); err != nil {
@@ -160,12 +173,12 @@ func (m *multiplexer) routeStream(s quic.Stream) {
 
 type router struct {
 	sync.RWMutex
-	routes map[uint64]chan<- quic.Stream
+	routes map[uint64]chan<- *connRequest
 }
 
-func newRouter() *router { return &router{routes: make(map[uint64]chan<- quic.Stream)} }
+func newRouter() *router { return &router{routes: make(map[uint64]chan<- *connRequest)} }
 
-func (r *router) Get(h hasher) (ch chan<- quic.Stream, ok bool) {
+func (r *router) Get(h hasher) (ch chan<- *connRequest, ok bool) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -174,7 +187,7 @@ func (r *router) Get(h hasher) (ch chan<- quic.Stream, ok bool) {
 	return
 }
 
-func (r *router) Add(p path, ch chan<- quic.Stream) (ok bool) {
+func (r *router) Add(p path, ch chan<- *connRequest) (ok bool) {
 	r.Lock()
 	// TODO: hash the path
 	if _, ok = r.routes[p.Hash()]; !ok {
@@ -298,4 +311,87 @@ func newQUICPipe(s quic.Stream, sock mangos.Socket) (p *quicPipe) {
 	}
 
 	return
+}
+
+type streamNegotiator struct{ quic.Stream }
+
+func (n *streamNegotiator) Header() (*connHeader, error) {
+	h := new(connHeader)
+	return h, binary.Read(n, binary.BigEndian, h)
+}
+
+// Abort attempts to notify the peer of the problem before closing the connection
+func (n *streamNegotiator) Abort(status uint8) {
+	binary.Write(n, binary.BigEndian, &connResp{Status: status})
+}
+
+type connRequest struct {
+	H *connHeader
+	quic.Stream
+}
+
+type connResp struct {
+	Status uint8
+	*connHeader
+}
+
+func dialPipe(path hasher, s quic.Stream, sock mangos.Socket) (p *quicPipe, err error) {
+	h := &connHeader{
+		Proto: sock.GetProtocol().Number(),
+		Path:  path.Hash(),
+	}
+
+	if err = binary.Write(s, binary.BigEndian, h); err != nil {
+		return
+	}
+
+	var resp connResp
+	if err = binary.Read(s, binary.BigEndian, &resp); err != nil {
+		return
+	}
+
+	switch resp.Status {
+	case statusOK:
+
+		if resp.Proto != sock.GetProtocol().PeerNumber() {
+			err = errors.New("invalid peer protocol")
+		} else {
+			p = &quicPipe{s: s, num: h.Proto, pnum: resp.Proto}
+			if v, e := sock.GetOption(mangos.OptionMaxRecvSize); e == nil {
+				// socket guarantees this is an integer
+				p.maxrx = int64(v.(int))
+			}
+		}
+
+	case statusBadHeader:
+		err = errors.New("missing or malformed header")
+	case statusBadPath:
+		err = errors.New("refused - nobody there")
+	}
+
+	return
+}
+
+func listenPipe(path hasher, r *connRequest, sock mangos.Socket) (*quicPipe, error) {
+
+	resp := new(connResp)
+
+	if r.H.Proto != sock.GetProtocol().PeerNumber() {
+		resp.Status = statusBadProto
+	} else {
+		resp.Proto = sock.GetProtocol().Number()
+		resp.Path = path.Hash()
+	}
+
+	if err := binary.Write(r, binary.BigEndian, resp); err != nil {
+		return nil, err
+	}
+
+	p := &quicPipe{s: r, num: r.H.Proto, pnum: resp.Proto}
+	if v, e := sock.GetOption(mangos.OptionMaxRecvSize); e == nil {
+		// socket guarantees this is an integer
+		p.maxrx = int64(v.(int))
+	}
+
+	return p, nil
 }
