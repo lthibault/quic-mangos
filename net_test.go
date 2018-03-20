@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"net/url"
 	"testing"
-
-	quic "github.com/lucas-clemente/quic-go"
 )
 
 func TestNetloc(t *testing.T) {
@@ -29,7 +27,7 @@ func (b *bufCloser) Close() (err error) {
 
 func TestRouter(t *testing.T) {
 	r := newRouter()
-	ch := make(chan quic.Stream)
+	ch := make(chan *connRequest)
 	path := asPath("/some/path")
 
 	t.Run("Add", func(t *testing.T) {
@@ -171,7 +169,7 @@ func TestMultiplexer(t *testing.T) {
 
 	t.Run("TestRouterOps", func(t *testing.T) {
 		t.Run("RegisterPath", func(t *testing.T) {
-			ch := make(chan quic.Stream)
+			ch := make(chan *connRequest)
 
 			t.Run("SlotFree", func(t *testing.T) {
 				if err := mx.RegisterPath(asPath(n.Path), ch); err != nil {
