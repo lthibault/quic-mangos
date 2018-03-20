@@ -43,7 +43,7 @@ func (dm *dialMux) LoadSession(n netlocator, tc *tls.Config, qc *quic.Config) er
 
 func (dm dialMux) Dial(path string) (s quic.Stream, err error) {
 
-	if s, err := dm.sess.OpenStreamSync(); err != nil {
+	if s, err = dm.sess.OpenStreamSync(); err != nil {
 		err = errors.Wrap(err, "open stream")
 	} else {
 		// There's no Close method for mangos.PipeDialer, so we need to decr
