@@ -27,20 +27,22 @@ type path interface {
 }
 
 type pathString struct {
+	sync.Once
 	s string
 	i uint64
 }
 
 func asPath(s string) *pathString { return &pathString{s: s} }
 
-func (p pathString) String() string { return p.s }
+func (p *pathString) String() string { return p.s }
 
 func (p *pathString) Hash() (i uint64) {
-	if p.i == 0 {
+	p.Do(func() {
 		hasher := md5.New()
 		hasher.Write([]byte(p.s))
 		p.i = binary.BigEndian.Uint64(hasher.Sum(nil)[:8])
-	}
+	})
+
 	return p.i
 }
 
@@ -58,13 +60,8 @@ func (n netloc) Netloc() string { return n.Host }
 
 // connHeader is exchanged during the initial handshake.
 type connHeader struct {
-	Zero    byte // must be zero
-	S       byte // 'S'
-	P       byte // 'P'
-	Version byte // only zero at present
-	Proto   uint16
-	Rsvd    uint16 // always zero at present
-	Path    uint64 // 64-bit hash of the path
+	Proto uint16
+	Path  uint64 // 64-bit hash of the path
 }
 
 func (h *connHeader) Load(r io.Reader) error { return binary.Read(r, binary.BigEndian, h) }
@@ -149,16 +146,16 @@ func (m *multiplexer) Serve(sess quic.Session) {
 
 func (m *multiplexer) routeStream(s quic.Stream) {
 
-	var h = new(connHeader)
-	if err := h.Load(s); err != nil {
-		// TODO:  find some way to report "invalid header" errors back to the dialer
-		_ = s.Close()
-	} else if ch, ok := m.routes.Get(pathHash(h.Hash())); !ok {
-		// TODO:  find some way to report "refused - nobody there" errors back to the dialer
-		_ = s.Close()
-	} else {
-		ch <- s
-	}
+	// var h = new(connHeader)
+	// if err := h.Load(s); err != nil {
+	// 	// TODO:  find some way to report "invalid header" errors back to the dialer
+	// 	_ = s.Close()
+	// } else if ch, ok := m.routes.Get(pathHash(h.Hash())); !ok {
+	// 	// TODO:  find some way to report "refused - nobody there" errors back to the dialer
+	// 	_ = s.Close()
+	// } else {
+	// 	ch <- s
+	// }
 }
 
 type router struct {
@@ -224,45 +221,9 @@ func (r *refcntSession) DecrAndClose() (err error) {
 }
 
 type quicPipe struct {
-	s     quic.Stream
-	maxrx int64 // NOTE: (probably) set via socket value in NewQUICConn
-	sock  mangos.Socket
-	proto mangos.Protocol
-}
-
-func (p *quicPipe) handshake(h hasher) (err error) {
-
-	if v, e := p.sock.GetOption(mangos.OptionMaxRecvSize); e == nil {
-		// socket guarantees this is an integer
-		p.maxrx = int64(v.(int))
-	}
-
-	hdr := &connHeader{
-		S: 'S', P: 'P',
-		Proto: p.proto.Number(),
-		Path:  h.Hash(),
-	}
-
-	if err = hdr.Dump(p.s); err != nil {
-		return err
-	}
-
-	if err = hdr.Load(p.s); err != nil {
-		_ = p.s.Close()
-		return errors.Wrap(err, "maybe wrong path?")
-	}
-
-	if hdr.Zero != 0 || hdr.S != 'S' || hdr.P != 'P' || hdr.Rsvd != 0 {
-		_ = p.s.Close()
-		return mangos.ErrBadVersion
-	}
-
-	if hdr.Proto != p.proto.PeerNumber() {
-		_ = p.s.Close()
-		return mangos.ErrBadProto
-	}
-
-	return
+	s         quic.Stream
+	maxrx     int64 // NOTE: (probably) set via socket value in NewQUICConn
+	num, pnum uint16
 }
 
 func (p quicPipe) Send(msg *mangos.Message) error {
@@ -310,9 +271,8 @@ func (p quicPipe) Recv() (msg *mangos.Message, err error) {
 
 func (p quicPipe) Close() error { return p.s.Close() }
 
-func (p quicPipe) LocalProtocol() uint16 { return p.proto.Number() }
-
-func (p quicPipe) RemoteProtocol() uint16 { return p.proto.PeerNumber() }
+func (p quicPipe) LocalProtocol() uint16  { return p.num }
+func (p quicPipe) RemoteProtocol() uint16 { return p.pnum }
 
 func (p quicPipe) IsOpen() bool {
 	select {
@@ -327,12 +287,15 @@ func (p quicPipe) GetProp(name string) (interface{}, error) {
 	return nil, mangos.ErrBadProperty
 }
 
-func newQUICPipe(p path, s quic.Stream, sock mangos.Socket) (*quicPipe, error) {
-	pipe := &quicPipe{s: s, proto: sock.GetProtocol(), sock: sock}
+func newQUICPipe(s quic.Stream, sock mangos.Socket) (p *quicPipe) {
+	proto := sock.GetProtocol()
 
-	if err := pipe.handshake(p); err != nil {
-		return nil, err
+	p = &quicPipe{s: s, num: proto.Number(), pnum: proto.PeerNumber()}
+
+	if v, e := sock.GetOption(mangos.OptionMaxRecvSize); e == nil {
+		// socket guarantees this is an integer
+		p.maxrx = int64(v.(int))
 	}
 
-	return pipe, nil
+	return
 }

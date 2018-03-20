@@ -131,7 +131,7 @@ func (l listener) Accept() (mangos.Pipe, error) {
 		return nil, errors.Wrap(err, "mux accept")
 	}
 
-	return newQUICPipe(asPath(l.Path), s, l.sock)
+	return listenPipe(asPath(l.Path), s, l.sock)
 }
 
 func (l listener) Close() error {
