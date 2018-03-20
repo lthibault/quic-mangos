@@ -379,8 +379,10 @@ func listenPipe(path hasher, r *connRequest, sock mangos.Socket) (*quicPipe, err
 	if r.H.Proto != sock.GetProtocol().PeerNumber() {
 		resp.Status = statusBadProto
 	} else {
-		resp.Proto = sock.GetProtocol().Number()
-		resp.Path = path.Hash()
+		resp.connHeader = &connHeader{
+			Proto: sock.GetProtocol().Number(),
+			Path:  path.Hash(),
+		}
 	}
 
 	if err := binary.Write(r, binary.BigEndian, resp); err != nil {
