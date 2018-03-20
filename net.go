@@ -46,8 +46,7 @@ func (p *pathString) Hash() (i uint64) {
 
 type pathHash uint64
 
-func (p pathHash) String() string { panic("pathHash cannot determine original path") }
-func (p pathHash) Hash() uint64   { return uint64(p) }
+func (p pathHash) Hash() uint64 { return uint64(p) }
 
 type netlocator interface {
 	Netloc() string
@@ -169,12 +168,12 @@ type router struct {
 
 func newRouter() *router { return &router{routes: make(map[uint64]chan<- quic.Stream)} }
 
-func (r *router) Get(p path) (ch chan<- quic.Stream, ok bool) {
+func (r *router) Get(h hasher) (ch chan<- quic.Stream, ok bool) {
 	r.RLock()
 	defer r.RUnlock()
 
 	// TODO:  hash the path
-	ch, ok = r.routes[p.Hash()]
+	ch, ok = r.routes[h.Hash()]
 	return
 }
 
