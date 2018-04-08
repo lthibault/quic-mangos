@@ -28,7 +28,7 @@ func newRefCntListener(n netlocator, l quic.Listener, d listenDeleter) *refcntLi
 	cq := make(chan struct{})
 	return &refcntListener{
 		Listener: l,
-		Doner:    ctx.Lift(cq),
+		Doner:    ctx.C(cq),
 		gc: func() {
 			close(cq)
 			d.DelListener(n)
