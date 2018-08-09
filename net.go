@@ -92,7 +92,7 @@ func (m *multiplexer) RegisterPath(path string, ch chan<- net.Conn) (err error) 
 func (m *multiplexer) UnregisterPath(path string) { m.routes.Del(path) }
 
 func (m *multiplexer) Serve(sess quic.Session) {
-	for _ = range ctx.Tick(sess.Context()) {
+	for range ctx.Tick(sess.Context()) {
 		stream, err := sess.AcceptStream()
 		if err != nil {
 			continue

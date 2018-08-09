@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 
 	"github.com/SentimensRG/ctx"
-	"github.com/go-mangos/mangos"
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/nanomsg/mangos"
 	"github.com/pkg/errors"
 )
 

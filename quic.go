@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"path/filepath"
 
-	"github.com/go-mangos/mangos"
+	"github.com/nanomsg/mangos"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )

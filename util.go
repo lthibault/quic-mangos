@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/go-mangos/mangos"
+	"github.com/nanomsg/mangos"
 	quic "github.com/lucas-clemente/quic-go"
 )
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/SentimensRG/ctx"
 	"github.com/SentimensRG/ctx/sigctx"
-	"github.com/go-mangos/mangos/protocol/pair"
 	quic "github.com/lthibault/quic-mangos"
+	"github.com/nanomsg/mangos/protocol/pair"
 )
 
 const (

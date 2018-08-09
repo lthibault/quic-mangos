@@ -1,6 +1,6 @@
 # QUIC-mangos
 
-A QUIC transport for [mangos](https://github.com/go-mangos/mangos) written in pure Go
+A QUIC transport for [mangos](https://github.com/nanomsg/mangos) written in pure Go
 
 [![Godoc Reference](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](https://godoc.org/github.com/lthibault/quic-mangos)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lthibault/quic-mangos?style=flat-square)](https://goreportcard.com/report/github.com/lthibault/quic-mangos)

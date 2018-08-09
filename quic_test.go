@@ -3,7 +3,7 @@ package quic
 import (
 	"testing"
 
-	"github.com/go-mangos/mangos"
+	"github.com/nanomsg/mangos"
 )
 
 func TestCanary(t *testing.T) {}
