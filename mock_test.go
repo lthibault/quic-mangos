@@ -60,7 +60,8 @@ func (mockSess) RemoteAddr() net.Addr                         { return mockAddrN
 func (mockSess) AcceptUniStream() (quic.ReceiveStream, error) { return nil, nil }
 func (mockSess) OpenUniStream() (quic.SendStream, error)      { return nil, nil }
 func (mockSess) OpenUniStreamSync() (quic.SendStream, error)  { return nil, nil }
-func (m *mockSess) Close(error) error {
+func (mockSess) CloseWithError(quic.ErrorCode, error) error   { return nil }
+func (m *mockSess) Close() error {
 	m.closed = true
 	return nil
 }

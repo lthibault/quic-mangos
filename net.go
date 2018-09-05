@@ -238,7 +238,7 @@ func (r *refcntSession) Incr() *refcntSession {
 
 func (r *refcntSession) DecrAndClose() (err error) {
 	if i := atomic.AddInt32(&r.refcnt, -1); i == 0 {
-		err = r.Close(nil)
+		err = r.Close()
 		r.gc()
 	} else if i < 0 {
 		panic(errors.New("already closed"))
